@@ -61,9 +61,9 @@ const SHOT_RANGE_LAY = 55; // layup
 const CHARS = {
   nara: {
     name: 'NARA', role: 'VOCALS · GUITAR',
-    skin: '#FDBCB4', hair: '#1C0A00', shirt: '#FF1493',
-    pants: '#4B0082', shoes: '#FF69B4', brow: '#3D0000',
-    hairStyle: 'long', hue: '#FF1493',
+    skin: '#FDBCB4', hair: '#1C0A00', shirt: '#222222',
+    pants: '#3366DD', shoes: '#2A2A2A', brow: '#3D0000',
+    hairStyle: 'bob', hue: '#FF1493',
     quips: ['✨ SWISH!', '💖 YES!', '🎸 LFG!', '⭐ MONEY!']
   },
   ethan: {
@@ -178,92 +178,83 @@ function initState() {
 
 // ── Court Drawing ───────────────────────────────────────────────
 function drawSky() {
-  const g = ctx.createLinearGradient(0, 55, 0, 330);
-  g.addColorStop(0, '#7EC8E3');
-  g.addColorStop(1, '#B5DCF0');
+  const g = ctx.createLinearGradient(0, 55, 0, FLOOR_Y);
+  g.addColorStop(0, '#4A90C0');
+  g.addColorStop(0.5, '#87CEEA');
+  g.addColorStop(1, '#A8D8EA');
   ctx.fillStyle = g;
-  ctx.fillRect(0, 55, GW, 275);
+  ctx.fillRect(0, 55, GW, FLOOR_Y - 55);
+  // Clouds
+  ctx.fillStyle = 'rgba(255,255,255,0.88)';
+  for (const [x, y, r] of [[72,120,22],[98,110,26],[122,118,20],[50,124,17]]) {
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
+  }
+  for (const [x, y, r] of [[272,138,20],[295,128,24],[318,136,18],[252,142,15]]) {
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
+  }
 }
 
 function drawCrowd() {
-  const headColors  = ['#FDBCB4','#C68642','#8D5524','#FDBCB4','#C68642','#8D5524'];
-  const shirtColors = ['#FF69B4','#00BFFF','#FF6B35','#9B59B6','#FFD700','#00FF7F','#FF4500','#EE82EE'];
-  for (let i = 0; i < 30; i++) {
-    const col = i % 13, row = Math.floor(i / 13);
-    const x = 12 + col * 29, y = 160 + row * 38;
-    const sc = shirtColors[i % shirtColors.length];
-    const hc = headColors[i % headColors.length];
-    // arms up for excitement
-    const armUp = (i + S.frame * 0) % 7 < 3;
-    ctx.fillStyle = sc;
-    ctx.fillRect(x - 9, y + 6, 18, 16);
-    // tiny arms
-    ctx.fillStyle = hc;
-    if (armUp) {
-      ctx.fillRect(x - 14, y - 2, 4, 10);
-      ctx.fillRect(x + 10, y - 2, 4, 10);
-    }
-    circle(x, y, 9, hc, '#000', 1.2);
-    // simple dots for eyes
-    ctx.fillStyle = '#000';
-    circle(x - 3, y - 1, 1.3, '#000');
-    circle(x + 3, y - 1, 1.3, '#000');
+  // Tree silhouettes at the court horizon
+  const baseY = FLOOR_Y - 8;
+  const trees = [
+    [20, 55], [58, 70], [96, 52], [138, 65],
+    [178, 58], [218, 72], [256, 55], [294, 68],
+    [332, 60], [368, 74],
+  ];
+  for (const [x, h] of trees) {
+    const trunkH  = Math.round(h * 0.38);
+    const crownRX = Math.round(h * 0.33);
+    const crownRY = Math.round(h * 0.58);
+    const crownY  = baseY - trunkH;
+    ctx.fillStyle = '#2E1C0E';
+    ctx.fillRect(x - 4, baseY - trunkH, 8, trunkH);
+    ctx.fillStyle = '#174A0F';
+    ctx.beginPath(); ctx.ellipse(x, crownY, crownRX, crownRY, 0, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#0F3009';
+    ctx.beginPath(); ctx.ellipse(x + 6, crownY + 5, crownRX * 0.7, crownRY * 0.7, 0, 0, Math.PI*2); ctx.fill();
   }
 }
 
 function drawFloor() {
-  // Back wall (fills gap between sky and floor)
-  const wall = ctx.createLinearGradient(0, 305, 0, FLOOR_Y);
-  wall.addColorStop(0, '#B5722A');
-  wall.addColorStop(0.6, '#C8813A');
-  wall.addColorStop(1, '#D4893A');
-  ctx.fillStyle = wall;
-  ctx.fillRect(0, 305, GW, FLOOR_Y - 305);
-
-  // Court floor surface
+  // Court surface — outdoor asphalt
   const g = ctx.createLinearGradient(0, FLOOR_Y - 8, 0, GH);
-  g.addColorStop(0, '#E8A347');
-  g.addColorStop(0.4, '#D4893A');
-  g.addColorStop(1, '#BF6B28');
+  g.addColorStop(0, '#888F96');
+  g.addColorStop(0.35, '#767D84');
+  g.addColorStop(1, '#606870');
   ctx.fillStyle = g;
   ctx.fillRect(0, FLOOR_Y - 8, GW, GH - FLOOR_Y + 8);
 
-  // Floor-wall shadow line
-  ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+  // Floor junction shadow
+  ctx.strokeStyle = 'rgba(0,0,0,0.28)';
   ctx.lineWidth = 3;
   ctx.beginPath(); ctx.moveTo(0, FLOOR_Y - 8); ctx.lineTo(GW, FLOOR_Y - 8); ctx.stroke();
 
-  // Wood grain
-  ctx.save();
-  ctx.strokeStyle = 'rgba(160, 90, 20, 0.22)';
-  ctx.lineWidth = 1;
-  for (let y = FLOOR_Y; y < GH; y += 13) {
-    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(GW, y); ctx.stroke();
-  }
-  ctx.restore();
+  // Blue painted key / lane
+  ctx.fillStyle = 'rgba(40, 100, 210, 0.38)';
+  ctx.fillRect(210, FLOOR_Y - 8, HOOP_X + 12 - 210, GH - FLOOR_Y + 8);
 
-  // Court lines
   ctx.save();
-  ctx.strokeStyle = 'rgba(255,255,255,0.7)';
-  ctx.lineWidth = 2;
   ctx.lineCap = 'round';
 
-  // Baseline (right side)
+  // Key outline (white)
+  ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(210, FLOOR_Y - 8); ctx.lineTo(HOOP_X + 12, FLOOR_Y - 8); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(210, FLOOR_Y - 8); ctx.lineTo(210, FLOOR_Y + 20); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(HOOP_X + 12, FLOOR_Y - 8); ctx.lineTo(HOOP_X + 12, FLOOR_Y + 30); ctx.stroke();
 
-  // Free throw "lane" lines
-  ctx.beginPath(); ctx.moveTo(210, FLOOR_Y - 8); ctx.lineTo(210, FLOOR_Y + 8); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(210, FLOOR_Y - 8); ctx.lineTo(HOOP_X + 12, FLOOR_Y - 8); ctx.stroke();
-
-  // 3-point arc (left half of circle, originating from baseline)
+  // 3-point arc — orange
+  ctx.strokeStyle = 'rgba(235, 100, 30, 0.88)';
+  ctx.lineWidth = 2.5;
   ctx.beginPath();
   ctx.arc(HOOP_X + 12, FLOOR_Y - 8, SHOT_RANGE_3, Math.PI * 0.52, Math.PI, false);
   ctx.stroke();
 
   // Center circle hint
-  ctx.beginPath();
-  ctx.arc(35, FLOOR_Y - 8, 24, 0, Math.PI, true);
-  ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.arc(35, FLOOR_Y - 8, 24, 0, Math.PI, true); ctx.stroke();
 
   ctx.restore();
 }
@@ -319,6 +310,7 @@ function drawChar(id, hasBall) {
 
   ctx.save();
   ctx.translate(p.x, p.y + jy);
+  ctx.scale(1.15, 1.15);
   if (p.facing < 0) ctx.scale(-1, 1);
 
   const { anim } = p;
@@ -456,6 +448,18 @@ function drawChar(id, hasBall) {
     ctx.beginPath(); ctx.arc(0, Hcy, 21, Math.PI * 1.1, 0, false);
     ctx.lineTo(13, Hcy + 4); ctx.lineTo(-13, Hcy + 4); ctx.closePath();
     ctx.fill(); ctx.stroke();
+  } else if (d.hairStyle === 'bob') {
+    // Sides extend to jaw line (shorter than 'long')
+    ctx.beginPath();
+    ctx.arc(0, Hcy, 21, Math.PI * 0.85, Math.PI * 0.15, true);
+    ctx.lineTo(18, Hcy + 18); ctx.lineTo(-18, Hcy + 18); ctx.closePath();
+    ctx.fill(); ctx.stroke();
+    // Top cap
+    ctx.beginPath(); ctx.arc(0, Hcy, 21, Math.PI * 1.15, 0, false);
+    ctx.lineTo(14, Hcy + 4); ctx.lineTo(-14, Hcy + 4); ctx.closePath();
+    ctx.fill(); ctx.stroke();
+    // Straight bangs fringe
+    ctx.beginPath(); ctx.moveTo(-17, Hcy - 9); ctx.lineTo(17, Hcy - 9); ctx.stroke();
   }
 
   // ── Face ─────────────────────────────────────────────────
@@ -835,6 +839,13 @@ function drawCharSprite(id, anim, f) {
   } else if (d.hairStyle === 'glasses') {
     ctx.beginPath(); ctx.arc(0, Hcy, 21, Math.PI * 1.1, 0, false);
     ctx.lineTo(13, Hcy + 4); ctx.lineTo(-13, Hcy + 4); ctx.closePath(); ctx.fill(); ctx.stroke();
+  } else if (d.hairStyle === 'bob') {
+    ctx.beginPath();
+    ctx.arc(0, Hcy, 21, Math.PI * 0.85, Math.PI * 0.15, true);
+    ctx.lineTo(18, Hcy + 18); ctx.lineTo(-18, Hcy + 18); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.arc(0, Hcy, 21, Math.PI * 1.15, 0, false);
+    ctx.lineTo(14, Hcy + 4); ctx.lineTo(-14, Hcy + 4); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-17, Hcy - 9); ctx.lineTo(17, Hcy - 9); ctx.stroke();
   }
   drawFace(d, anim, Hcy, f);
 }
