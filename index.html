@@ -1,0 +1,1546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>NARA'S ROOM — HALF COURT HERO</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body {
+  width: 100%; height: 100%;
+  background: #1a0a3e;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+  touch-action: none;
+  -webkit-user-select: none; user-select: none;
+}
+canvas {
+  display: block;
+  image-rendering: pixelated;
+}
+</style>
+</head>
+<body>
+<canvas id="g"></canvas>
+<script>
+/* ═══════════════════════════════════════════════════════════════
+   NARA'S ROOM: HALF COURT HERO  |  bandmusicgames.party
+   2v2 half-court basketball · Lizzy McGuire cartoon style
+   ═══════════════════════════════════════════════════════════════ */
+
+// ── Canvas ──────────────────────────────────────────────────────
+const canvas = document.getElementById('g');
+const ctx    = canvas.getContext('2d');
+const GW = 390, GH = 750;
+canvas.width = GW; canvas.height = GH;
+
+let _scale = 1;
+function fitCanvas() {
+  _scale = Math.min(window.innerWidth / GW, window.innerHeight / GH);
+  canvas.style.width  = GW * _scale + 'px';
+  canvas.style.height = GH * _scale + 'px';
+}
+window.addEventListener('resize', fitCanvas);
+fitCanvas();
+
+// ── Constants ───────────────────────────────────────────────────
+const FLOOR_Y   = 510;   // characters stand here (feet level)
+const HOOP_X    = 352;   // hoop x position
+const RIM_Y     = 258;   // rim vertical center
+const RIM_R     = 19;    // rim radius
+const WIN_SCORE = 11;
+const SHOT_RANGE_3 = 210; // 3-point distance from hoop
+const SHOT_RANGE_2 = 130; // 2-point (mid range)
+const SHOT_RANGE_LAY = 55; // layup
+
+// ── Character Definitions ───────────────────────────────────────
+const CHARS = {
+  nara: {
+    name: 'NARA', role: 'VOCALS · GUITAR',
+    skin: '#FDBCB4', hair: '#1C0A00', shirt: '#FF1493',
+    pants: '#4B0082', shoes: '#FF69B4', brow: '#3D0000',
+    hairStyle: 'long', hue: '#FF1493',
+    quips: ['✨ SWISH!', '💖 YES!', '🎸 LFG!', '⭐ MONEY!']
+  },
+  ethan: {
+    name: 'ETHAN', role: 'BASS',
+    skin: '#C68642', hair: '#3D2B1F', shirt: '#00BFFF',
+    pants: '#1C1C2E', shoes: '#FFFFFF', brow: '#3D2B1F',
+    hairStyle: 'short', hue: '#00BFFF',
+    quips: ['🎸 YEAH!', '💪 LOW!', '🏀 NICE!', '🔥 FIRE!']
+  },
+  brendan: {
+    name: 'BRENDAN', role: 'DRUMS',
+    skin: '#FDBCB4', hair: '#CC2200', shirt: '#FF6B35',
+    pants: '#2D5A27', shoes: '#222', brow: '#CC2200',
+    hairStyle: 'spiky', hue: '#FF6B35',
+    quips: ['🥁 BOOM!', '🔥 BLOCKED!', '😤 MINE!', '💥 DENIED!']
+  },
+  james: {
+    name: 'JAMES', role: 'KEYS',
+    skin: '#8D5524', hair: '#111', shirt: '#9B59B6',
+    pants: '#2C2C2C', shoes: '#9B59B6', brow: '#111',
+    hairStyle: 'glasses', hue: '#9B59B6',
+    quips: ['🎹 NICE!', '😎 EZ!', '💜 YES!', '🎯 PERFECT!']
+  }
+};
+const TEAM_A_IDS = ['nara', 'ethan'];
+const TEAM_B_IDS = ['brendan', 'james'];
+
+// ── Drawing Helpers ─────────────────────────────────────────────
+function rr(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+function fillRR(x, y, w, h, r, fill, stroke, lw) {
+  rr(x, y, w, h, r);
+  if (fill)   { ctx.fillStyle = fill; ctx.fill(); }
+  if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lw || 2; ctx.stroke(); }
+}
+
+function circle(x, y, r, fill, stroke, lw) {
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
+  if (fill)   { ctx.fillStyle = fill; ctx.fill(); }
+  if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lw || 2; ctx.stroke(); }
+}
+
+// ── State ───────────────────────────────────────────────────────
+let S = null;
+
+function mkPlayer(id, team, x, facing) {
+  return {
+    id, team, x, y: FLOOR_Y,
+    vx: 0, vy: 0,
+    jumpY: 0, onGround: true,
+    anim: 'idle', facing,
+    hasBall: false,
+    ai: team === 'b',
+    aiTimer: Math.random() * 60,
+  };
+}
+
+function initState() {
+  S = {
+    screen: 'title',
+    frame: 0,
+    score: [0, 0],
+    possession: 'a',
+
+    ball: { x: 100, y: FLOOR_Y - 30, vx: 0, vy: 0, inAir: false, carrier: 'nara' },
+
+    players: {
+      nara:    mkPlayer('nara',    'a', 100,  1),
+      ethan:   mkPlayer('ethan',   'a', 175,  1),
+      brendan: mkPlayer('brendan', 'b', 260, -1),
+      james:   mkPlayer('james',   'b', 320, -1),
+    },
+
+    // Active player (human controls this one)
+    activeHuman: 'nara',
+
+    // Shot ring
+    shotRing: null,
+    shotLocked: false,
+
+    // Thoughts / popups
+    thoughts: [],
+
+    // Joystick
+    joy: { active: false, id: -1, ox: 0, oy: 0, dx: 0, dy: 0 },
+    shootPressed: false,
+    passPressed: false,
+    prevShootPressed: false,
+
+    // Score flash
+    scoreFlash: null,   // { text, color, ttl }
+    pauseTimer: 0,
+    scored: false,
+  };
+
+  // Give ball to nara
+  S.players.nara.hasBall = true;
+  S.ball.carrier = 'nara';
+}
+
+// ── Court Drawing ───────────────────────────────────────────────
+function drawSky() {
+  const g = ctx.createLinearGradient(0, 55, 0, 330);
+  g.addColorStop(0, '#7EC8E3');
+  g.addColorStop(1, '#B5DCF0');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 55, GW, 275);
+}
+
+function drawCrowd() {
+  const headColors  = ['#FDBCB4','#C68642','#8D5524','#FDBCB4','#C68642','#8D5524'];
+  const shirtColors = ['#FF69B4','#00BFFF','#FF6B35','#9B59B6','#FFD700','#00FF7F','#FF4500','#EE82EE'];
+  for (let i = 0; i < 30; i++) {
+    const col = i % 13, row = Math.floor(i / 13);
+    const x = 12 + col * 29, y = 160 + row * 38;
+    const sc = shirtColors[i % shirtColors.length];
+    const hc = headColors[i % headColors.length];
+    // arms up for excitement
+    const armUp = (i + S.frame * 0) % 7 < 3;
+    ctx.fillStyle = sc;
+    ctx.fillRect(x - 9, y + 6, 18, 16);
+    // tiny arms
+    ctx.fillStyle = hc;
+    if (armUp) {
+      ctx.fillRect(x - 14, y - 2, 4, 10);
+      ctx.fillRect(x + 10, y - 2, 4, 10);
+    }
+    circle(x, y, 9, hc, '#000', 1.2);
+    // simple dots for eyes
+    ctx.fillStyle = '#000';
+    circle(x - 3, y - 1, 1.3, '#000');
+    circle(x + 3, y - 1, 1.3, '#000');
+  }
+}
+
+function drawFloor() {
+  // Back wall (fills gap between sky and floor)
+  const wall = ctx.createLinearGradient(0, 305, 0, FLOOR_Y);
+  wall.addColorStop(0, '#B5722A');
+  wall.addColorStop(0.6, '#C8813A');
+  wall.addColorStop(1, '#D4893A');
+  ctx.fillStyle = wall;
+  ctx.fillRect(0, 305, GW, FLOOR_Y - 305);
+
+  // Court floor surface
+  const g = ctx.createLinearGradient(0, FLOOR_Y - 8, 0, GH);
+  g.addColorStop(0, '#E8A347');
+  g.addColorStop(0.4, '#D4893A');
+  g.addColorStop(1, '#BF6B28');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, FLOOR_Y - 8, GW, GH - FLOOR_Y + 8);
+
+  // Floor-wall shadow line
+  ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+  ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(0, FLOOR_Y - 8); ctx.lineTo(GW, FLOOR_Y - 8); ctx.stroke();
+
+  // Wood grain
+  ctx.save();
+  ctx.strokeStyle = 'rgba(160, 90, 20, 0.22)';
+  ctx.lineWidth = 1;
+  for (let y = FLOOR_Y; y < GH; y += 13) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(GW, y); ctx.stroke();
+  }
+  ctx.restore();
+
+  // Court lines
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+  ctx.lineWidth = 2;
+  ctx.lineCap = 'round';
+
+  // Baseline (right side)
+  ctx.beginPath(); ctx.moveTo(HOOP_X + 12, FLOOR_Y - 8); ctx.lineTo(HOOP_X + 12, FLOOR_Y + 30); ctx.stroke();
+
+  // Free throw "lane" lines
+  ctx.beginPath(); ctx.moveTo(210, FLOOR_Y - 8); ctx.lineTo(210, FLOOR_Y + 8); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(210, FLOOR_Y - 8); ctx.lineTo(HOOP_X + 12, FLOOR_Y - 8); ctx.stroke();
+
+  // 3-point arc (left half of circle, originating from baseline)
+  ctx.beginPath();
+  ctx.arc(HOOP_X + 12, FLOOR_Y - 8, SHOT_RANGE_3, Math.PI * 0.52, Math.PI, false);
+  ctx.stroke();
+
+  // Center circle hint
+  ctx.beginPath();
+  ctx.arc(35, FLOOR_Y - 8, 24, 0, Math.PI, true);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+function drawHoop() {
+  const hx = HOOP_X, bx = HOOP_X + 14;
+
+  // Pole
+  ctx.fillStyle = '#999';
+  ctx.strokeStyle = '#777';
+  ctx.lineWidth = 1;
+  ctx.fillRect(bx + 2, RIM_Y - 2, 5, FLOOR_Y - RIM_Y + 8);
+  ctx.strokeRect(bx + 2, RIM_Y - 2, 5, FLOOR_Y - RIM_Y + 8);
+
+  // Backboard
+  fillRR(bx, RIM_Y - 62, 13, 58, 2, '#FFFFFFEE', '#CCC', 1.5);
+  // Target box on backboard
+  ctx.strokeStyle = '#FF6600'; ctx.lineWidth = 2;
+  ctx.strokeRect(bx + 2, RIM_Y - 38, 9, 24);
+
+  // Rim support bracket
+  ctx.strokeStyle = '#888'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(bx + 2, RIM_Y - 4); ctx.lineTo(hx, RIM_Y); ctx.stroke();
+
+  // Rim (orange)
+  ctx.strokeStyle = '#FF6600'; ctx.lineWidth = 4;
+  ctx.beginPath(); ctx.moveTo(bx, RIM_Y); ctx.lineTo(hx - RIM_R, RIM_Y); ctx.stroke();
+  // Rim oval (perspective)
+  ctx.beginPath(); ctx.ellipse(hx, RIM_Y, RIM_R, RIM_R * 0.3, 0, 0, Math.PI * 2); ctx.stroke();
+
+  // Net
+  ctx.strokeStyle = '#FFF'; ctx.lineWidth = 1.2;
+  const segs = 8, nh = 22;
+  for (let i = 0; i <= segs; i++) {
+    const a = (i / segs) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.moveTo(hx + Math.cos(a) * RIM_R, RIM_Y + Math.sin(a) * RIM_R * 0.3);
+    ctx.lineTo(hx + Math.cos(a) * RIM_R * 0.38, RIM_Y + nh);
+    ctx.stroke();
+  }
+  for (let j = 1; j < 4; j++) {
+    const t = j / 4, nr = RIM_R * (1 - t * 0.65), ny = RIM_Y + t * nh;
+    ctx.beginPath(); ctx.ellipse(hx, ny, nr, nr * 0.25, 0, 0, Math.PI * 2); ctx.stroke();
+  }
+}
+
+// ── Character Drawing ────────────────────────────────────────────
+function drawChar(id, hasBall) {
+  const p  = S.players[id];
+  const d  = CHARS[id];
+  const f  = S.frame;
+  const jy = p.jumpY;
+
+  ctx.save();
+  ctx.translate(p.x, p.y + jy);
+  if (p.facing < 0) ctx.scale(-1, 1);
+
+  const { anim } = p;
+  let legA = 0, armA = 0, scX = 1, scY = 1, bobY = 0;
+
+  if (anim === 'idle') {
+    bobY = Math.sin(f * 0.045) * 2.5;
+    legA = Math.sin(f * 0.045) * 4;
+  } else if (anim === 'run') {
+    legA = Math.sin(f * 0.28) * 30;
+    armA = -legA * 0.7;
+    bobY = Math.abs(Math.sin(f * 0.28)) * -3.5;
+    scX  = 1 + Math.sin(f * 0.56) * 0.02;
+  } else if (anim === 'jump') {
+    scX = 0.87; scY = 1.14; bobY = 0;
+  } else if (anim === 'land') {
+    scX = 1.2; scY = 0.8; bobY = 3;
+  } else if (anim === 'celebrate') {
+    bobY  = Math.abs(Math.sin(f * 0.18)) * -12;
+    legA  = Math.sin(f * 0.18) * 20;
+    scX   = 1 + Math.abs(Math.sin(f * 0.18)) * 0.04;
+  } else if (anim === 'shoot') {
+    armA = -40;
+  } else if (anim === 'sad') {
+    bobY = 4; scY = 0.95;
+  }
+
+  ctx.scale(scX, scY);
+  ctx.translate(0, bobY);
+
+  // Shadow
+  ctx.save();
+  ctx.scale(1 / scX, 1 / scY);
+  ctx.translate(0, -bobY);
+  const shadowY = -jy * 0.15 + 3;
+  const shadowW = 18 - Math.abs(jy) * 0.08;
+  ctx.fillStyle = 'rgba(0,0,0,0.15)';
+  ctx.beginPath(); ctx.ellipse(0, shadowY, shadowW, 5, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+
+  const LW = 2.2;
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+
+  // Positions (y = 0 is feet)
+  const Ky = -25, Hy = -47, Sy = -68, Ny = -76, Hcy = -96;
+
+  // ── Legs ─────────────────────────────────────────────────
+  for (const [cx, la] of [[-7, legA], [7, -legA]]) {
+    ctx.save();
+    ctx.translate(cx, Ky + 25);
+    ctx.rotate(la * Math.PI / 180);
+    // Upper leg
+    rr(-4.5, -25, 9, 25, 3.5);
+    ctx.fillStyle = d.pants; ctx.fill();
+    ctx.strokeStyle = '#000'; ctx.lineWidth = LW; ctx.stroke();
+    // Lower leg (slight counter-rotate)
+    ctx.save();
+    ctx.rotate(-la * 0.35 * Math.PI / 180);
+    rr(-3.5, 0, 7, 22, 3);
+    ctx.fillStyle = d.pants; ctx.fill();
+    ctx.strokeStyle = '#000'; ctx.lineWidth = LW; ctx.stroke();
+    // Shoe
+    ctx.fillStyle = d.shoes;
+    ctx.beginPath(); ctx.ellipse(cx > 0 ? 4 : -4, 22, 10, 5.5, 0, 0, Math.PI * 2);
+    ctx.fill(); ctx.strokeStyle = '#000'; ctx.lineWidth = LW; ctx.stroke();
+    ctx.restore();
+    ctx.restore();
+  }
+
+  // ── Body ─────────────────────────────────────────────────
+  rr(-12, Hy, 24, 24, 5);
+  ctx.fillStyle = d.shirt; ctx.fill();
+  ctx.strokeStyle = '#000'; ctx.lineWidth = LW; ctx.stroke();
+  // Collar / skin triangle
+  ctx.fillStyle = d.skin;
+  ctx.beginPath(); ctx.arc(0, Sy + 8, 5, 0, Math.PI * 2); ctx.fill();
+
+  // ── Arms ─────────────────────────────────────────────────
+  const baseArmL = anim === 'run' ? armA + 10  : 12;
+  const baseArmR = anim === 'run' ? armA - 10  : -12;
+  const shootLift = anim === 'shoot' ? -35 : 0;
+  const ballArm   = hasBall ? -25 + shootLift : shootLift;
+
+  for (const [cx, angle, isBallArm] of [
+    [-14, baseArmL,          false],
+    [ 14, baseArmR + ballArm, true ]
+  ]) {
+    ctx.save();
+    ctx.translate(cx, Sy + 5);
+    ctx.rotate(angle * Math.PI / 180);
+    rr(-3.5, 0, 7, 18, 3);
+    ctx.fillStyle = d.skin; ctx.fill();
+    ctx.strokeStyle = '#000'; ctx.lineWidth = LW; ctx.stroke();
+    ctx.restore();
+  }
+
+  // ── Ball (held) ───────────────────────────────────────────
+  if (hasBall) {
+    const bx = anim === 'shoot' ? 16 : 22;
+    const by = anim === 'shoot' ? -88 : -55;
+    drawBallAt(bx, by, 10);
+  }
+
+  // ── Head ─────────────────────────────────────────────────
+  circle(0, Hcy, 21, d.skin, '#000', 2.5);
+
+  // ── Hair ─────────────────────────────────────────────────
+  ctx.fillStyle = d.hair; ctx.strokeStyle = '#000'; ctx.lineWidth = 2;
+
+  if (d.hairStyle === 'long') {
+    ctx.beginPath();
+    ctx.arc(0, Hcy, 21, Math.PI * 0.85, Math.PI * 0.15, true);
+    ctx.lineTo(18, Hcy + 38); ctx.lineTo(-18, Hcy + 38); ctx.closePath();
+    ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.arc(0, Hcy, 21, Math.PI * 1.15, 0, false);
+    ctx.lineTo(14, Hcy + 4); ctx.lineTo(-14, Hcy + 4); ctx.closePath();
+    ctx.fill(); ctx.stroke();
+  } else if (d.hairStyle === 'short') {
+    ctx.beginPath(); ctx.arc(0, Hcy, 21, Math.PI * 1.15, 0, false);
+    ctx.lineTo(14, Hcy + 5); ctx.lineTo(-14, Hcy + 5); ctx.closePath();
+    ctx.fill(); ctx.stroke();
+  } else if (d.hairStyle === 'spiky') {
+    ctx.beginPath();
+    ctx.moveTo(-21, Hcy + 6);
+    ctx.lineTo(-16, Hcy - 12);
+    ctx.lineTo(-9,  Hcy - 36);
+    ctx.lineTo(-2,  Hcy - 15);
+    ctx.lineTo(5,   Hcy - 44);
+    ctx.lineTo(12,  Hcy - 18);
+    ctx.lineTo(18,  Hcy - 10);
+    ctx.lineTo(21,  Hcy + 6);
+    ctx.arc(0, Hcy, 21, 0, Math.PI, false);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+  } else if (d.hairStyle === 'glasses') {
+    ctx.beginPath(); ctx.arc(0, Hcy, 21, Math.PI * 1.1, 0, false);
+    ctx.lineTo(13, Hcy + 4); ctx.lineTo(-13, Hcy + 4); ctx.closePath();
+    ctx.fill(); ctx.stroke();
+  }
+
+  // ── Face ─────────────────────────────────────────────────
+  drawFace(d, anim, Hcy, f);
+
+  ctx.restore();
+}
+
+function drawFace(d, anim, hy, f) {
+  const ey = hy - 1;
+  let eyeW = 7, eyeH = 9;
+  if (anim === 'celebrate') { eyeW = 9; eyeH = 12; }
+  if (anim === 'sad')       { eyeH = 6; eyeW = 7; }
+  if (anim === 'run')       { eyeH = 8; }
+
+  // Eye whites
+  for (const ex of [-9, 9]) {
+    ctx.beginPath(); ctx.ellipse(ex, ey, eyeW, eyeH, 0, 0, Math.PI * 2);
+    ctx.fillStyle = '#FFF'; ctx.fill();
+    ctx.strokeStyle = '#000'; ctx.lineWidth = 1.5; ctx.stroke();
+  }
+
+  // Pupils
+  const pupilOff = anim === 'sad' ? 0 : 2;
+  for (const ex of [-9, 9]) {
+    circle(ex + pupilOff, ey + 1, 3.5, '#000');
+    circle(ex + pupilOff + 1, ey - 1, 1.3, '#FFF');
+  }
+
+  // Eyebrows
+  ctx.strokeStyle = d.brow; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+  const browYOff = anim === 'celebrate' ? -4 : anim === 'sad' ? 0 : -2;
+  const browSlant = anim === 'sad' ? 0.22 : anim === 'celebrate' ? -0.14 : 0;
+  for (const [ex, sl] of [[-9, browSlant], [9, -browSlant]]) {
+    ctx.save(); ctx.translate(ex, ey - eyeH - 2 + browYOff); ctx.rotate(sl);
+    ctx.beginPath(); ctx.moveTo(-5.5, 0); ctx.lineTo(5.5, 0); ctx.stroke();
+    ctx.restore();
+  }
+
+  // Glasses for James
+  if (d.hairStyle === 'glasses') {
+    ctx.strokeStyle = '#222'; ctx.lineWidth = 2;
+    for (const ex of [-9, 9]) {
+      ctx.beginPath(); ctx.arc(ex, ey, eyeW + 2.5, 0, Math.PI * 2); ctx.stroke();
+    }
+    ctx.beginPath(); ctx.moveTo(-9 + eyeW + 2.5, ey); ctx.lineTo(9 - eyeW - 2.5, ey); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-9 - eyeW - 2.5, ey); ctx.lineTo(-9 - eyeW - 8, ey - 1); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(9 + eyeW + 2.5, ey); ctx.lineTo(9 + eyeW + 8, ey - 1); ctx.stroke();
+  }
+
+  // Mouth
+  const my = hy + 13;
+  ctx.strokeStyle = '#000'; ctx.lineWidth = 2; ctx.lineCap = 'round';
+  if (anim === 'celebrate') {
+    ctx.beginPath(); ctx.arc(0, my - 3, 9, 0.12, Math.PI - 0.12, false); ctx.stroke();
+    rr(-8, my - 3, 16, 6, 3); ctx.fillStyle = '#FFF'; ctx.fill();
+  } else if (anim === 'sad') {
+    ctx.beginPath(); ctx.arc(0, my + 5, 8, Math.PI + 0.15, -0.15, false); ctx.stroke();
+  } else {
+    ctx.beginPath(); ctx.arc(0, my - 2, 6, 0.18, Math.PI - 0.18, false); ctx.stroke();
+  }
+
+  // Blush
+  if (anim === 'celebrate' || d.name === 'NARA') {
+    ctx.fillStyle = 'rgba(255,100,120,0.28)';
+    ctx.beginPath(); ctx.ellipse(-14, my - 5, 7, 4, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(14, my - 5, 7, 4, 0, 0, Math.PI * 2); ctx.fill();
+  }
+}
+
+// ── Ball ─────────────────────────────────────────────────────────
+function drawBallAt(x, y, r) {
+  const g = ctx.createRadialGradient(x - r * 0.3, y - r * 0.3, r * 0.1, x, y, r);
+  g.addColorStop(0, '#FF8C42');
+  g.addColorStop(0.6, '#E65C00');
+  g.addColorStop(1, '#B34000');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#000'; ctx.lineWidth = 1.5; ctx.stroke();
+
+  // Seams
+  ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 1.2;
+  ctx.beginPath(); ctx.moveTo(x - r, y); ctx.bezierCurveTo(x - r * 0.3, y - r * 0.5, x + r * 0.3, y - r * 0.5, x + r, y); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x - r, y); ctx.bezierCurveTo(x - r * 0.3, y + r * 0.5, x + r * 0.3, y + r * 0.5, x + r, y); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x, y - r); ctx.arc(x, y, r, -Math.PI / 2, Math.PI / 2); ctx.stroke();
+}
+
+function drawBall() {
+  const b = S.ball;
+  if (b.carrier) return; // drawn on character
+
+  // Shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.12)';
+  ctx.beginPath(); ctx.ellipse(b.x, FLOOR_Y + 4, 12 - (FLOOR_Y - b.y) * 0.04, 4, 0, 0, Math.PI * 2); ctx.fill();
+
+  drawBallAt(b.x, b.y, 12);
+}
+
+// ── Shot Ring ─────────────────────────────────────────────────────
+function drawShotRing() {
+  if (!S.shotRing) return;
+  const ring = S.shotRing;
+  const pct  = ring.r / ring.maxR;
+  const perfect = Math.abs(ring.r - RIM_R) < 8;
+
+  const alpha = 0.3 + pct * 0.5;
+  const color = perfect ? `rgba(80,255,80,${alpha})` : `rgba(255,200,0,${alpha})`;
+
+  ctx.beginPath(); ctx.arc(HOOP_X, RIM_Y, ring.r, 0, Math.PI * 2);
+  ctx.strokeStyle = color; ctx.lineWidth = perfect ? 4 : 3;
+  ctx.stroke();
+
+  if (perfect) {
+    ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(HOOP_X, RIM_Y, ring.r + 4, 0, Math.PI * 2); ctx.stroke();
+  }
+}
+
+// ── Thoughts / Popups ────────────────────────────────────────────
+function spawnThought(id, text) {
+  const p = S.players[id];
+  S.thoughts.push({
+    x: p.x, y: p.y + p.jumpY - 120,
+    text, ttl: 90, maxTtl: 90,
+    dx: (Math.random() - 0.5) * 0.5,
+  });
+}
+
+function drawThoughts() {
+  for (const th of S.thoughts) {
+    const alpha = Math.min(1, th.ttl / 20);
+    const sc    = 1 + (1 - th.ttl / th.maxTtl) * 0.18;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(th.x, th.y);
+    ctx.scale(sc, sc);
+
+    // Bubble
+    const tw = ctx.measureText(th.text).width + 18;
+    const th2 = 28;
+    fillRR(-tw / 2, -th2 / 2, tw, th2, 12, '#FFFFFAEE', '#000', 2);
+    // Tail
+    ctx.beginPath();
+    ctx.moveTo(-5, th2 / 2); ctx.lineTo(5, th2 / 2); ctx.lineTo(0, th2 / 2 + 10);
+    ctx.closePath(); ctx.fillStyle = '#FFFFFAEE'; ctx.fill();
+    ctx.strokeStyle = '#000'; ctx.lineWidth = 1.5; ctx.stroke();
+
+    ctx.fillStyle = '#111'; ctx.font = 'bold 13px sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(th.text, 0, 0);
+    ctx.restore();
+  }
+}
+
+// ── HUD / Score Bar ──────────────────────────────────────────────
+function drawHUD() {
+  // Background bar
+  ctx.fillStyle = '#1a0a3e';
+  ctx.fillRect(0, 0, GW, 55);
+
+  // Team A score
+  ctx.fillStyle = CHARS.nara.hue;
+  ctx.font = 'bold 32px monospace';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(S.score[0], 80, 28);
+
+  // Team B score
+  ctx.fillStyle = CHARS.brendan.hue;
+  ctx.fillText(S.score[1], GW - 80, 28);
+
+  // Middle divider + labels
+  ctx.fillStyle = 'rgba(255,255,255,0.15)';
+  ctx.fillRect(GW / 2 - 1, 8, 2, 38);
+
+  ctx.font = '9px monospace'; ctx.letterSpacing = '0.12em';
+  ctx.fillStyle = 'rgba(255,255,255,0.5)';
+  ctx.fillText('NARA\'S ROOM', 80, 47);
+  ctx.fillText('ALL-STARS', GW - 80, 47);
+  ctx.fillText('FIRST TO ' + WIN_SCORE, GW / 2, 28);
+
+  // Score flash
+  if (S.scoreFlash && S.scoreFlash.ttl > 0) {
+    const pct = S.scoreFlash.ttl / 70;
+    ctx.save();
+    ctx.globalAlpha = pct;
+    ctx.font = `bold ${36 + (1 - pct) * 20}px monospace`;
+    ctx.fillStyle = S.scoreFlash.color;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(S.scoreFlash.text, GW / 2, 130);
+    ctx.restore();
+  }
+}
+
+// ── Controls UI ──────────────────────────────────────────────────
+function drawControls() {
+  const isAttacking = S.possession === 'a';
+
+  // Joystick zone hint (left)
+  if (!S.joy.active) {
+    ctx.fillStyle = 'rgba(255,255,255,0.04)';
+    ctx.beginPath(); ctx.arc(90, 650, 55, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.1)'; ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    ctx.font = '10px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('MOVE', 90, 650);
+  } else {
+    // Active joystick
+    circle(S.joy.ox, S.joy.oy, 55, 'rgba(255,255,255,0.06)', 'rgba(255,255,255,0.2)', 1.5);
+    const kx = S.joy.ox + S.joy.dx, ky = S.joy.oy + S.joy.dy;
+    circle(kx, ky, 26, 'rgba(255,255,255,0.2)', 'rgba(255,255,255,0.4)', 2);
+  }
+
+  // Shoot / Block button (right)
+  const shootLabel = isAttacking ? 'SHOOT' : 'BLOCK';
+  const shootColor = isAttacking ? CHARS.nara.hue : '#00BFFF';
+  const shootAlpha = S.shootPressed ? 0.6 : 0.35;
+  circle(300, 640, 42, `rgba(0,0,0,${shootAlpha})`, shootColor, 2.5);
+  ctx.fillStyle = shootColor;
+  ctx.font = 'bold 11px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(shootLabel, 300, 640);
+
+  // Pass / Steal button
+  const passLabel = isAttacking ? 'PASS' : 'STEAL';
+  const passColor = '#FFD700';
+  const passAlpha = S.passPressed ? 0.6 : 0.25;
+  circle(300, 710, 28, `rgba(0,0,0,${passAlpha})`, passColor, 2);
+  ctx.fillStyle = passColor;
+  ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(passLabel, 300, 710);
+}
+
+// ── Title Screen ─────────────────────────────────────────────────
+function drawTitle() {
+  // Gradient background
+  const bg = ctx.createLinearGradient(0, 0, 0, GH);
+  bg.addColorStop(0, '#1a0a3e');
+  bg.addColorStop(0.5, '#2d0f5a');
+  bg.addColorStop(1, '#0a2060');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, GW, GH);
+
+  // Stars
+  ctx.fillStyle = 'rgba(255,255,255,0.6)';
+  for (let i = 0; i < 40; i++) {
+    const sx = ((i * 97) % GW);
+    const sy = ((i * 61) % 280);
+    const sr = 0.8 + Math.sin(S.frame * 0.03 + i) * 0.5;
+    circle(sx, sy, sr, 'rgba(255,255,255,0.6)');
+  }
+
+  // Court preview (tiny)
+  ctx.fillStyle = 'rgba(220, 140, 50, 0.15)';
+  ctx.fillRect(0, 400, GW, 200);
+
+  // Title text
+  ctx.save();
+  const tsc = 1 + Math.sin(S.frame * 0.04) * 0.02;
+  ctx.translate(GW / 2, 90);
+  ctx.scale(tsc, tsc);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+
+  ctx.fillStyle = '#FFD700';
+  ctx.font = 'bold 13px monospace';
+  ctx.letterSpacing = '0.3em';
+  ctx.fillText('NARA\'S ROOM', 0, 0);
+
+  ctx.fillStyle = '#FF1493';
+  ctx.font = 'bold 44px monospace';
+  ctx.letterSpacing = '0.05em';
+  ctx.fillText('HALF', 0, 44);
+  ctx.fillText('COURT', 0, 88);
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillText('HERO', 0, 132);
+  ctx.restore();
+
+  // Character lineup
+  const lineup = ['nara', 'ethan', 'brendan', 'james'];
+  const positions = [50, 148, 246, 344];
+  for (let i = 0; i < lineup.length; i++) {
+    const id  = lineup[i];
+    const cx  = positions[i];
+    const d   = CHARS[id];
+    const bob = Math.sin(S.frame * 0.04 + i * 1.2) * 4;
+
+    ctx.save();
+    ctx.translate(cx, 340 + bob);
+
+    // Team color glow
+    const team = i < 2 ? 0 : 1;
+    ctx.shadowColor = team === 0 ? CHARS.nara.hue : CHARS.brendan.hue;
+    ctx.shadowBlur = 16;
+
+    // Draw character (simplified - just the body/head)
+    const f = S.players[lineup[i]] ? S.players[lineup[i]].facing : (i < 2 ? 1 : -1);
+    if (f < 0) ctx.scale(-1, 1);
+    drawCharSprite(id, 'idle', S.frame + i * 30);
+    ctx.restore();
+
+    // Name tag
+    const nameX = cx;
+    fillRR(nameX - 28, 350, 56, 18, 6, 'rgba(0,0,0,0.6)', d.hue, 1.5);
+    ctx.fillStyle = d.hue;
+    ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(d.name, nameX, 359);
+  }
+
+  // Team labels
+  ctx.fillStyle = CHARS.nara.hue;
+  ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center';
+  ctx.fillText('YOUR TEAM', GW / 4, 380);
+  ctx.fillStyle = CHARS.brendan.hue;
+  ctx.fillText('CPU TEAM', (GW * 3) / 4, 380);
+
+  // vs divider
+  ctx.fillStyle = 'rgba(255,255,255,0.5)';
+  ctx.fillRect(GW / 2 - 1, 300, 2, 100);
+  ctx.font = 'bold 16px monospace'; ctx.textAlign = 'center';
+  ctx.fillText('VS', GW / 2, 347);
+
+  // Tap to play
+  const tapAlpha = 0.5 + Math.sin(S.frame * 0.07) * 0.4;
+  ctx.fillStyle = `rgba(255,255,255,${tapAlpha})`;
+  ctx.font = 'bold 14px monospace'; ctx.textAlign = 'center';
+  ctx.letterSpacing = '0.25em';
+  ctx.fillText('TAP TO PLAY', GW / 2, 450);
+
+  // bandmusicgames label
+  ctx.fillStyle = 'rgba(255,255,255,0.2)';
+  ctx.font = '9px monospace'; ctx.letterSpacing = '0.15em';
+  ctx.fillText('BANDMUSICGAMES.PARTY', GW / 2, GH - 20);
+}
+
+// Sprite-only version (no translate) for title screen
+function drawCharSprite(id, anim, f) {
+  const d   = CHARS[id];
+  const LW  = 2;
+  const bob = Math.sin(f * 0.04) * 2.5;
+  const legA = Math.sin(f * 0.04) * 4;
+
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+
+  const Ky = -25, Hy = -47, Sy = -68, Hcy = -96;
+  ctx.translate(0, bob);
+
+  for (const [cx, la] of [[-7, legA], [7, -legA]]) {
+    ctx.save(); ctx.translate(cx, Ky + 25); ctx.rotate(la * Math.PI / 180);
+    rr(-4.5, -25, 9, 25, 3.5); ctx.fillStyle = d.pants; ctx.fill(); ctx.strokeStyle = '#000'; ctx.lineWidth = LW; ctx.stroke();
+    ctx.save(); ctx.rotate(-la * 0.35 * Math.PI / 180);
+    rr(-3.5, 0, 7, 22, 3); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = d.shoes; ctx.beginPath(); ctx.ellipse(cx > 0 ? 4 : -4, 22, 10, 5.5, 0, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = '#000'; ctx.lineWidth = LW; ctx.stroke();
+    ctx.restore(); ctx.restore();
+  }
+  rr(-12, Hy, 24, 24, 5); ctx.fillStyle = d.shirt; ctx.fill(); ctx.strokeStyle = '#000'; ctx.lineWidth = LW; ctx.stroke();
+  ctx.fillStyle = d.skin; ctx.beginPath(); ctx.arc(0, Sy + 8, 5, 0, Math.PI * 2); ctx.fill();
+  for (const [cx, angle] of [[-14, legA * 0.4 + 12], [14, -legA * 0.4 - 12]]) {
+    ctx.save(); ctx.translate(cx, Sy + 5); ctx.rotate(angle * Math.PI / 180);
+    rr(-3.5, 0, 7, 18, 3); ctx.fillStyle = d.skin; ctx.fill(); ctx.strokeStyle = '#000'; ctx.lineWidth = LW; ctx.stroke();
+    ctx.restore();
+  }
+  circle(0, Hcy, 21, d.skin, '#000', 2.5);
+
+  ctx.fillStyle = d.hair; ctx.strokeStyle = '#000'; ctx.lineWidth = 2;
+  if (d.hairStyle === 'long') {
+    ctx.beginPath(); ctx.arc(0, Hcy, 21, Math.PI * 0.85, Math.PI * 0.15, true);
+    ctx.lineTo(18, Hcy + 38); ctx.lineTo(-18, Hcy + 38); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.arc(0, Hcy, 21, Math.PI * 1.15, 0, false);
+    ctx.lineTo(14, Hcy + 4); ctx.lineTo(-14, Hcy + 4); ctx.closePath(); ctx.fill(); ctx.stroke();
+  } else if (d.hairStyle === 'short') {
+    ctx.beginPath(); ctx.arc(0, Hcy, 21, Math.PI * 1.15, 0, false);
+    ctx.lineTo(14, Hcy + 5); ctx.lineTo(-14, Hcy + 5); ctx.closePath(); ctx.fill(); ctx.stroke();
+  } else if (d.hairStyle === 'spiky') {
+    ctx.beginPath(); ctx.moveTo(-21, Hcy+6); ctx.lineTo(-16, Hcy-12); ctx.lineTo(-9, Hcy-36);
+    ctx.lineTo(-2, Hcy-15); ctx.lineTo(5, Hcy-44); ctx.lineTo(12, Hcy-18); ctx.lineTo(18, Hcy-10);
+    ctx.lineTo(21, Hcy+6); ctx.arc(0, Hcy, 21, 0, Math.PI, false); ctx.closePath(); ctx.fill(); ctx.stroke();
+  } else if (d.hairStyle === 'glasses') {
+    ctx.beginPath(); ctx.arc(0, Hcy, 21, Math.PI * 1.1, 0, false);
+    ctx.lineTo(13, Hcy + 4); ctx.lineTo(-13, Hcy + 4); ctx.closePath(); ctx.fill(); ctx.stroke();
+  }
+  drawFace(d, anim, Hcy, f);
+}
+
+// ── Game Over Screen ─────────────────────────────────────────────
+function drawGameOver() {
+  const bg = ctx.createLinearGradient(0, 0, 0, GH);
+  bg.addColorStop(0, '#1a0a3e'); bg.addColorStop(1, '#0a2060');
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, GW, GH);
+
+  const won = S.score[0] >= WIN_SCORE;
+  const color = won ? '#FFD700' : '#FF4444';
+  const text  = won ? 'NARA\'S ROOM WINS!' : 'ALL-STARS WIN!';
+  const sub   = won ? '🏀 GAME! 🎸' : '😤 BLOCKED!';
+
+  // Glow
+  ctx.shadowColor = color; ctx.shadowBlur = 30;
+  ctx.fillStyle = color;
+  ctx.font = 'bold 26px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(text, GW / 2, 200);
+  ctx.shadowBlur = 0;
+
+  ctx.fillStyle = '#FFF';
+  ctx.font = 'bold 28px monospace';
+  ctx.fillText(sub, GW / 2, 255);
+
+  // Score display
+  ctx.font = 'bold 56px monospace';
+  ctx.fillStyle = CHARS.nara.hue; ctx.fillText(S.score[0], GW / 2 - 60, 340);
+  ctx.fillStyle = 'rgba(255,255,255,0.4)'; ctx.fillText('-', GW / 2, 340);
+  ctx.fillStyle = CHARS.brendan.hue; ctx.fillText(S.score[1], GW / 2 + 60, 340);
+
+  // Characters celebrating/sad
+  const ids = ['nara', 'ethan', 'brendan', 'james'];
+  const xs   = [60, 145, 245, 330];
+  for (let i = 0; i < 4; i++) {
+    const isWinner = (won && i < 2) || (!won && i >= 2);
+    // Position directly - drawChar translates by p.x, p.y so set those
+    const fakePlayer = {
+      ...S.players[ids[i]],
+      anim: isWinner ? 'celebrate' : 'sad',
+      jumpY: 0, x: xs[i], y: 510,
+      facing: i < 2 ? 1 : -1
+    };
+    const orig = S.players[ids[i]];
+    S.players[ids[i]] = fakePlayer;
+    drawChar(ids[i], false);
+    S.players[ids[i]] = orig;
+  }
+
+  // Play again
+  const tapAlpha = 0.5 + Math.sin(S.frame * 0.07) * 0.4;
+  ctx.fillStyle = `rgba(255,255,255,${tapAlpha})`;
+  ctx.font = 'bold 14px monospace'; ctx.textAlign = 'center';
+  ctx.fillText('TAP TO PLAY AGAIN', GW / 2, 640);
+}
+
+// ── Input ────────────────────────────────────────────────────────
+function toGameCoords(clientX, clientY) {
+  const rect = canvas.getBoundingClientRect();
+  return {
+    x: (clientX - rect.left) / _scale,
+    y: (clientY - rect.top)  / _scale,
+  };
+}
+
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  for (const t of e.changedTouches) {
+    const { x, y } = toGameCoords(t.clientX, t.clientY);
+
+    if (S.screen === 'title' || S.screen === 'gameover') {
+      if (S.screen === 'gameover') initState();
+      S.screen = 'playing';
+      return;
+    }
+
+    if (S.screen !== 'playing') return;
+
+    // Check right-side buttons
+    const dShoot = Math.hypot(x - 300, y - 640);
+    const dPass  = Math.hypot(x - 300, y - 710);
+
+    if (dShoot < 48) {
+      S.shootPressed = true;
+      handleShootAction();
+      continue;
+    }
+    if (dPass < 34) {
+      S.passPressed = true;
+      handlePassAction();
+      continue;
+    }
+
+    // Left side → joystick
+    if (x < GW / 2 && !S.joy.active) {
+      S.joy = { active: true, id: t.identifier, ox: x, oy: y, dx: 0, dy: 0 };
+    }
+  }
+}, { passive: false });
+
+canvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  for (const t of e.changedTouches) {
+    if (t.identifier === S.joy.id) {
+      const { x, y } = toGameCoords(t.clientX, t.clientY);
+      const maxR = 55;
+      let dx = x - S.joy.ox, dy = y - S.joy.oy;
+      const len = Math.hypot(dx, dy);
+      if (len > maxR) { dx = dx / len * maxR; dy = dy / len * maxR; }
+      S.joy.dx = dx; S.joy.dy = dy;
+    }
+  }
+}, { passive: false });
+
+canvas.addEventListener('touchend', e => {
+  e.preventDefault();
+  for (const t of e.changedTouches) {
+    if (t.identifier === S.joy.id) {
+      S.joy = { active: false, id: -1, ox: 0, oy: 0, dx: 0, dy: 0 };
+    }
+    const { x, y } = toGameCoords(t.clientX, t.clientY);
+    if (Math.hypot(x - 300, y - 640) < 48) S.shootPressed = false;
+    if (Math.hypot(x - 300, y - 710) < 34) S.passPressed = false;
+  }
+}, { passive: false });
+
+// Keyboard support for desktop testing
+const KEYS = {};
+window.addEventListener('keydown', e => {
+  KEYS[e.code] = true;
+  if (S.screen === 'title' || S.screen === 'gameover') {
+    if (e.code === 'Space' || e.code === 'Enter') {
+      if (S.screen === 'gameover') initState();
+      S.screen = 'playing';
+    }
+    return;
+  }
+  if (S.screen !== 'playing') return;
+  if (e.code === 'KeyZ' || e.code === 'Space') { S.shootPressed = true; handleShootAction(); }
+  if (e.code === 'KeyX' || e.code === 'ShiftLeft') { S.passPressed = true; handlePassAction(); }
+});
+window.addEventListener('keyup', e => {
+  KEYS[e.code] = false;
+  if (e.code === 'KeyZ' || e.code === 'Space') S.shootPressed = false;
+  if (e.code === 'KeyX' || e.code === 'ShiftLeft') S.passPressed = false;
+});
+
+// Apply keyboard to joystick each frame
+function applyKeyboard() {
+  if (S.screen !== 'playing' || S.joy.active) return;
+  const left  = KEYS['ArrowLeft']  || KEYS['KeyA'];
+  const right = KEYS['ArrowRight'] || KEYS['KeyD'];
+  if (left || right) {
+    S.joy = { active: true, id: -2, ox: 0, oy: 0, dx: right ? 55 : -55, dy: 0 };
+  } else if (S.joy.id === -2) {
+    S.joy = { active: false, id: -1, ox: 0, oy: 0, dx: 0, dy: 0 };
+  }
+}
+
+// Mouse support for desktop testing
+canvas.addEventListener('mousedown', e => {
+  const { x, y } = toGameCoords(e.clientX, e.clientY);
+  if (S.screen === 'title' || S.screen === 'gameover') {
+    if (S.screen === 'gameover') initState();
+    S.screen = 'playing'; return;
+  }
+  if (S.screen !== 'playing') return;
+  const dShoot = Math.hypot(x - 300, y - 640);
+  const dPass  = Math.hypot(x - 300, y - 710);
+  if (dShoot < 48) { S.shootPressed = true; handleShootAction(); return; }
+  if (dPass  < 34) { S.passPressed  = true; handlePassAction();  return; }
+  if (x < GW / 2) S.joy = { active: true, id: 99, ox: x, oy: y, dx: 0, dy: 0 };
+});
+canvas.addEventListener('mousemove', e => {
+  if (!S.joy.active || S.joy.id !== 99) return;
+  const { x, y } = toGameCoords(e.clientX, e.clientY);
+  const maxR = 55;
+  let dx = x - S.joy.ox, dy = y - S.joy.oy;
+  const len = Math.hypot(dx, dy);
+  if (len > maxR) { dx = dx / len * maxR; dy = dy / len * maxR; }
+  S.joy.dx = dx; S.joy.dy = dy;
+});
+canvas.addEventListener('mouseup', () => {
+  S.joy = { active: false, id: -1, ox: 0, oy: 0, dx: 0, dy: 0 };
+  S.shootPressed = false; S.passPressed = false;
+});
+
+// ── Shot / Pass Actions ───────────────────────────────────────────
+function handleShootAction() {
+  if (S.possession !== 'a') {
+    // Defense: try block
+    tryBlock();
+    return;
+  }
+  if (S.shotRing) {
+    // Second tap: release shot
+    releaseShotAtRing();
+    return;
+  }
+  const ap = S.players[S.activeHuman];
+  const distToHoop = Math.abs(ap.x - HOOP_X);
+  if (distToHoop > SHOT_RANGE_3 + 20) return; // too far
+
+  // Start shot ring
+  S.shotRing = { r: 65, maxR: 65, minR: 8 };
+  ap.anim = 'shoot';
+}
+
+function releaseShotAtRing() {
+  if (!S.shotRing) return;
+  const ring = S.shotRing;
+  const ap   = S.players[S.activeHuman];
+  const dist = Math.abs(ap.x - HOOP_X);
+
+  // Accuracy: how close is ring.r to RIM_R
+  const diff = Math.abs(ring.r - RIM_R);
+  const acc  = Math.max(0, 1 - diff / 30);
+  const made = acc > 0.35 + Math.random() * 0.15;
+
+  fireBallShot(ap.x, ap.y + ap.jumpY - 55, made, dist);
+  S.shotRing = null;
+  S.ball.carrier = null;
+  ap.hasBall = false;
+  ap.anim = 'idle';
+}
+
+function fireBallShot(fromX, fromY, made, dist) {
+  const b = S.ball;
+  b.inAir = true;
+  b.carrier = null;
+
+  // Arc to hoop
+  const dx    = HOOP_X - fromX;
+  const dy    = RIM_Y - fromY;
+  const tFly  = 35 + dist * 0.08;
+  const drift = made ? 0 : (Math.random() - 0.5) * 35;
+
+  b.x   = fromX; b.y = fromY;
+  b.vx  = (dx + drift) / tFly;
+  b.vy  = (dy - 140) / tFly;
+  b._tFly  = tFly;
+  b._t     = 0;
+  b._made  = made;
+  b._fromX = fromX;
+  b._dy    = dy;
+  b._dx    = dx + drift;
+}
+
+function handlePassAction() {
+  if (S.possession !== 'a') {
+    // Defense: try steal
+    trySteal();
+    return;
+  }
+  const ap = S.players[S.activeHuman];
+  if (!ap.hasBall) return;
+  const teammate = S.activeHuman === 'nara' ? 'ethan' : 'nara';
+  const tp = S.players[teammate];
+
+  // Pass
+  ap.hasBall = false;
+  ap.anim = 'idle';
+  S.ball.carrier = null;
+  S.ball.inAir = true;
+  S.ball.x = ap.x; S.ball.y = ap.y - 50;
+  const dx = tp.x - ap.x, dy = (tp.y - 55) - (ap.y - 50);
+  S.ball.vx = dx / 16; S.ball.vy = dy / 16 - 3;
+  S.ball._pass = true;
+  S.ball._passTarget = teammate;
+
+  S.activeHuman = teammate;
+  spawnThought(teammate, '🏀');
+}
+
+function trySteal() {
+  const ap  = S.players[S.activeHuman];
+  const carriers = TEAM_B_IDS.filter(id => S.players[id].hasBall);
+  if (!carriers.length) return;
+  const carrier = S.players[carriers[0]];
+  const dist = Math.hypot(ap.x - carrier.x, ap.y - carrier.y);
+  if (dist < 55) {
+    const success = Math.random() < 0.45;
+    if (success) {
+      carrier.hasBall = false; carrier.anim = 'sad';
+      S.ball.carrier = S.activeHuman;
+      S.players[S.activeHuman].hasBall = true;
+      S.players[S.activeHuman].anim = 'celebrate';
+      S.possession = 'a';
+      spawnThought(S.activeHuman, CHARS[S.activeHuman].quips[2]);
+    } else {
+      S.players[S.activeHuman].anim = 'sad';
+      setTimeout(() => { if (S.players[S.activeHuman]) S.players[S.activeHuman].anim = 'idle'; }, 500);
+    }
+  }
+}
+
+function tryBlock() {
+  const shooter = TEAM_B_IDS.find(id => S.players[id].anim === 'shoot');
+  if (!shooter) return;
+  const ap   = S.players[S.activeHuman];
+  const bp   = S.players[shooter];
+  const dist = Math.hypot(ap.x - bp.x, ap.y - bp.y);
+  if (dist < 70) {
+    // Block success
+    if (S.ball.inAir) {
+      S.ball.vx *= -0.5; S.ball.vy = -8;
+    }
+    spawnThought(S.activeHuman, '🛡 BLOCK!');
+    bp.anim = 'sad';
+  }
+}
+
+// ── Physics Update ────────────────────────────────────────────────
+function updateBall() {
+  const b = S.ball;
+  if (b.carrier) {
+    const cp = S.players[b.carrier];
+    b.x = cp.x + cp.facing * 18;
+    b.y = cp.y + cp.jumpY - 48;
+    return;
+  }
+  if (!b.inAir) return;
+
+  b.vy += 0.45; // gravity
+  b.x += b.vx; b.y += b.vy;
+  if (b._t !== undefined) b._t++;
+
+  // Check hoop collision
+  const distToRim = Math.hypot(b.x - HOOP_X, b.y - RIM_Y);
+  if (distToRim < RIM_R + 10 && b.vy > 0 && b.y < RIM_Y + 20) {
+    if (b._made && distToRim < RIM_R + 6) {
+      scorePoint();
+      return;
+    } else if (distToRim < RIM_R + 3) {
+      // Rim out
+      b.vx = (Math.random() - 0.5) * 6;
+      b.vy = -5;
+      b._made = false;
+    }
+  }
+
+  // Pass target catch
+  if (b._pass) {
+    const target = S.players[b._passTarget];
+    if (target && Math.hypot(b.x - target.x, b.y - (target.y - 50)) < 40) {
+      b.carrier = b._passTarget;
+      target.hasBall = true;
+      target.anim = 'idle';
+      b.inAir = false; b._pass = false; b._passTarget = null;
+      return;
+    }
+  }
+
+  // Floor hit
+  if (b.y >= FLOOR_Y - 10) {
+    b.y = FLOOR_Y - 10;
+    if (b._made === false || !b._made) {
+      // Turnover or rebound
+      turnoverToCPU();
+    }
+    b.vy = -b.vy * 0.45;
+    b.vx *= 0.7;
+    if (Math.abs(b.vy) < 1.5) {
+      b.inAir = false; b.vy = 0; b.vx = 0;
+      if (!b.carrier) turnoverToCPU();
+    }
+  }
+
+  // Out of bounds (left)
+  if (b.x < -30) {
+    turnoverToCPU();
+  }
+}
+
+function scorePoint() {
+  const b = S.ball;
+  const dist = Math.abs((b._fromX || S.players[S.activeHuman]?.x || 100) - HOOP_X);
+  const pts  = dist > SHOT_RANGE_2 ? 3 : 2;
+  const team = S.possession;
+
+  S.score[team === 'a' ? 0 : 1] += pts;
+
+  const scorer = team === 'a' ? S.activeHuman : TEAM_B_IDS.find(id => S.players[id].hasBall) || 'brendan';
+  spawnThought(scorer, CHARS[scorer].quips[Math.floor(Math.random() * 4)]);
+
+  S.scoreFlash = {
+    text: pts + ' PTS!' + (pts === 3 ? ' 🔥' : ''),
+    color: team === 'a' ? CHARS.nara.hue : CHARS.brendan.hue,
+    ttl: 70
+  };
+
+  // Animate all team members
+  const teamIds = team === 'a' ? TEAM_A_IDS : TEAM_B_IDS;
+  const loseIds = team === 'a' ? TEAM_B_IDS : TEAM_A_IDS;
+  for (const id of teamIds) S.players[id].anim = 'celebrate';
+  for (const id of loseIds) S.players[id].anim = 'sad';
+
+  resetBallAfterScore(team === 'a' ? 'b' : 'a');
+
+  if (S.score[0] >= WIN_SCORE || S.score[1] >= WIN_SCORE) {
+    setTimeout(() => { S.screen = 'gameover'; }, 1500);
+  }
+}
+
+function resetBallAfterScore(nextPossession) {
+  S.possession = nextPossession;
+  const carrier = nextPossession === 'a' ? 'nara' : 'brendan';
+
+  for (const id of TEAM_A_IDS.concat(TEAM_B_IDS)) {
+    if (S.players[id].anim === 'celebrate' || S.players[id].anim === 'sad') {
+      setTimeout(() => { if (S.players[id]) S.players[id].anim = 'idle'; }, 1000);
+    }
+  }
+
+  for (const id of TEAM_A_IDS.concat(TEAM_B_IDS)) {
+    S.players[id].jumpY = 0; S.players[id].onGround = true;
+    S.players[id].hasBall = false;
+  }
+
+  // In half-court, the team getting possession starts at the top of the arc (left side)
+  // The defending team positions near the paint
+  if (nextPossession === 'a') {
+    S.players.nara.x = 80;    S.players.ethan.x   = 150;
+    S.players.brendan.x = 230; S.players.james.x   = 300;
+  } else {
+    S.players.brendan.x = 80;  S.players.james.x   = 155;
+    S.players.nara.x = 240;    S.players.ethan.x   = 305;
+  }
+
+  S.ball.inAir   = false;
+  S.ball.x       = nextPossession === 'a' ? 80 : 80;
+  S.ball.y       = FLOOR_Y - 30;
+  S.ball.vx      = 0; S.ball.vy = 0;
+  S.ball.carrier = carrier;
+  S.ball._made   = undefined;
+  S.players[carrier].hasBall = true;
+  S.activeHuman = 'nara';
+  S.shotRing = null;
+}
+
+function turnoverToCPU() {
+  if (S.possession === 'b') return; // already cpu's
+  S.possession = 'b';
+  S.ball.inAir = false;
+  S.ball.vx = 0; S.ball.vy = 0;
+  S.ball.carrier = 'brendan';
+  S.players.brendan.hasBall = true;
+  S.players.nara.hasBall = false;
+  S.players.ethan.hasBall = false;
+  S.ball._made = undefined;
+}
+
+// ── Player Movement Update ────────────────────────────────────────
+function updatePlayers() {
+  if (S.possession === 'a') {
+    // Human controls active player
+    const ap  = S.players[S.activeHuman];
+    const spd = 3.5;
+
+    if (S.joy.active) {
+      const jNorm = Math.hypot(S.joy.dx, S.joy.dy);
+      if (jNorm > 8) {
+        ap.vx     = (S.joy.dx / 55) * spd;
+        ap.facing = S.joy.dx > 0 ? 1 : -1;
+        ap.anim   = 'run';
+      } else {
+        ap.vx   = 0;
+        ap.anim = 'idle';
+      }
+    } else {
+      ap.vx   = 0;
+      ap.anim = ap.hasBall ? 'idle' : 'idle';
+    }
+
+    ap.x = Math.max(20, Math.min(300, ap.x + ap.vx));
+
+    // Teammate auto-positions for support
+    const teammate = S.activeHuman === 'nara' ? 'ethan' : 'nara';
+    const tp = S.players[teammate];
+    const targetX = ap.hasBall ? ap.x + 65 : ap.x - 55;
+    const tdx     = targetX - tp.x;
+    if (Math.abs(tdx) > 8) {
+      tp.x     += Math.sign(tdx) * 2;
+      tp.anim   = 'run';
+      tp.facing = tdx > 0 ? 1 : -1;
+    } else {
+      tp.anim = 'idle';
+    }
+    tp.x = Math.max(20, Math.min(300, tp.x));
+
+  } else {
+    // AI controls team B (offense)
+    updateAI();
+    // Human (team A) defends - can still move with joystick
+    const ap  = S.players[S.activeHuman];
+    const spd = 3;
+    if (S.joy.active) {
+      const jNorm = Math.hypot(S.joy.dx, S.joy.dy);
+      if (jNorm > 8) {
+        ap.vx     = (S.joy.dx / 55) * spd;
+        ap.facing = S.joy.dx > 0 ? 1 : -1;
+        ap.anim   = 'run';
+      } else { ap.vx = 0; ap.anim = 'idle'; }
+    } else { ap.vx = 0; ap.anim = 'idle'; }
+    ap.x = Math.max(20, Math.min(350, ap.x + ap.vx));
+    // Other team A player auto-defends
+    const teammate = S.activeHuman === 'nara' ? 'ethan' : 'nara';
+    const tp2 = S.players[teammate];
+    const rimGuard = Math.max(20, HOOP_X - 80);
+    const td2 = rimGuard - tp2.x;
+    if (Math.abs(td2) > 8) { tp2.x += Math.sign(td2) * 1.5; tp2.anim = 'run'; tp2.facing = td2 > 0 ? 1 : -1; }
+    else tp2.anim = 'idle';
+    tp2.x = Math.max(20, Math.min(350, tp2.x));
+  }
+
+  // Sync active human facing toward hoop when on offense
+  if (S.possession === 'a') {
+    const ap = S.players[S.activeHuman];
+    if (!S.joy.active) ap.facing = 1; // face right (toward hoop)
+  }
+}
+
+// ── AI Logic ──────────────────────────────────────────────────────
+function updateAI() {
+  const brendan = S.players.brendan;
+  const james   = S.players.james;
+
+  brendan.aiTimer++;
+  james.aiTimer++;
+
+  if (brendan.hasBall) {
+    // Brendan drives to hoop
+    brendan.facing = -1; // face left (toward court center initially... actually hoop is on right)
+    // Wait - hoop is at x=352. CPU team should be going toward the hoop to score.
+    // But CPU team starts at x=260-320... they need to drive toward the hoop too.
+    // For this game, CPU attacks the same hoop as the player? No - in 2v2 street ball,
+    // both teams attack the SAME hoop (half court). Let me confirm this is what we want.
+    // Yes - half court basketball, one hoop, both teams score on it.
+    brendan.facing = brendan.x < HOOP_X ? 1 : -1;
+    const targetX = HOOP_X - 60;
+    const dx = targetX - brendan.x;
+
+    if (Math.abs(dx) > 10) {
+      brendan.x   += Math.sign(dx) * 2.2;
+      brendan.anim = 'run';
+    } else {
+      brendan.anim = 'idle';
+      // In range, shoot after a timer
+      if (brendan.aiTimer > 80 + Math.random() * 40) {
+        brendan.aiTimer = 0;
+        aiShoot(brendan);
+      }
+    }
+    brendan.x = Math.max(20, Math.min(295, brendan.x));
+
+  } else if (james.hasBall) {
+    james.facing = james.x < HOOP_X ? 1 : -1;
+    const targetX = HOOP_X - 80;
+    const dx = targetX - james.x;
+    if (Math.abs(dx) > 10) {
+      james.x   += Math.sign(dx) * 2.0;
+      james.anim = 'run';
+    } else {
+      james.anim = 'idle';
+      if (james.aiTimer > 90 + Math.random() * 50) {
+        james.aiTimer = 0;
+        aiShoot(james);
+      }
+    }
+    james.x = Math.max(20, Math.min(295, james.x));
+
+  } else {
+    // Defensive/support positioning
+    const target_b = HOOP_X - 120;
+    const target_j = HOOP_X - 160;
+    if (Math.abs(brendan.x - target_b) > 8) {
+      brendan.x += Math.sign(target_b - brendan.x) * 1.5;
+      brendan.anim = 'run'; brendan.facing = target_b > brendan.x ? 1 : -1;
+    } else brendan.anim = 'idle';
+    if (Math.abs(james.x - target_j) > 8) {
+      james.x += Math.sign(target_j - james.x) * 1.5;
+      james.anim = 'run'; james.facing = target_j > james.x ? 1 : -1;
+    } else james.anim = 'idle';
+  }
+}
+
+function aiShoot(p) {
+  const dist = Math.abs(p.x - HOOP_X);
+  const acc  = dist < SHOT_RANGE_LAY ? 0.75 : dist < SHOT_RANGE_2 ? 0.55 : 0.35;
+  const made = Math.random() < acc;
+
+  p.anim = 'shoot';
+  p.hasBall = false;
+  S.ball.carrier = null;
+  fireBallShot(p.x, p.y - 55, made, dist);
+  S.ball._fromX = p.x;
+
+  setTimeout(() => {
+    if (p.anim === 'shoot') p.anim = 'idle';
+  }, 600);
+
+  // If missed, human team gets possession on rebound (simplified)
+  if (!made) {
+    setTimeout(() => {
+      if (S.possession === 'b' && !S.ball.carrier) {
+        S.possession = 'a';
+        S.ball.carrier = 'nara';
+        S.players.nara.hasBall = true;
+        S.players.brendan.hasBall = false;
+        S.players.james.hasBall = false;
+        S.ball.inAir = false;
+        S.ball.x = S.players.nara.x;
+        S.ball.y = FLOOR_Y - 30;
+        spawnThought('nara', '🏀 REBOUND!');
+      }
+    }, 1800);
+  }
+}
+
+// ── Shot Ring Update ──────────────────────────────────────────────
+function updateShotRing() {
+  if (!S.shotRing) return;
+  const ring   = S.shotRing;
+  const shrink = 0.65; // px per frame
+  ring.r = Math.max(ring.minR, ring.r - shrink);
+
+  // Auto-release when ring collapses
+  if (ring.r <= ring.minR + 0.5) {
+    releaseShotAtRing();
+  }
+}
+
+// ── Thoughts Update ───────────────────────────────────────────────
+function updateThoughts() {
+  for (let i = S.thoughts.length - 1; i >= 0; i--) {
+    S.thoughts[i].ttl--;
+    S.thoughts[i].x += S.thoughts[i].dx;
+    S.thoughts[i].y -= 0.4;
+    if (S.thoughts[i].ttl <= 0) S.thoughts.splice(i, 1);
+  }
+}
+
+// ── Score Flash Update ────────────────────────────────────────────
+function updateScoreFlash() {
+  if (S.scoreFlash && S.scoreFlash.ttl > 0) S.scoreFlash.ttl--;
+}
+
+// ── Main Game Loop ────────────────────────────────────────────────
+function loop() {
+  requestAnimationFrame(loop);
+  S.frame++;
+
+  ctx.clearRect(0, 0, GW, GH);
+
+  if (S.screen === 'title') {
+    drawTitle();
+    return;
+  }
+
+  if (S.screen === 'gameover') {
+    drawGameOver();
+    return;
+  }
+
+  // ── Update ──────────────────────────────────────────────────────
+  applyKeyboard();
+  updatePlayers();
+  updateBall();
+  updateShotRing();
+  updateThoughts();
+  updateScoreFlash();
+
+  // ── Draw ────────────────────────────────────────────────────────
+  drawSky();
+  drawCrowd();
+  drawFloor();
+  drawHoop();
+
+  // Draw characters (back to front by y position)
+  const allIds = TEAM_A_IDS.concat(TEAM_B_IDS);
+  for (const id of allIds) {
+    drawChar(id, S.players[id].hasBall);
+  }
+
+  drawBall();
+  drawShotRing();
+  drawThoughts();
+  drawHUD();
+  drawControls();
+
+  // Possession indicator
+  if (S.possession === 'a') {
+    ctx.fillStyle = CHARS.nara.hue;
+    ctx.font = '9px monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillText('▶ YOUR BALL', 10, 42);
+  } else {
+    ctx.fillStyle = CHARS.brendan.hue;
+    ctx.font = '9px monospace'; ctx.textAlign = 'right';
+    ctx.fillText('CPU BALL ◀', GW - 10, 42);
+  }
+}
+
+// ── Boot ─────────────────────────────────────────────────────────
+initState();
+loop();
+</script>
+</body>
+</html>
