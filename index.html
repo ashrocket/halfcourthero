@@ -38,6 +38,17 @@ const ctx    = canvas.getContext('2d');
 const GW = 390, GH = 750;
 canvas.width = GW; canvas.height = GH;
 
+// ── Background image ────────────────────────────────────────────
+const courtBg = new Image();
+courtBg.src = 'assets/court_env.png';
+
+// ── Character sprites ───────────────────────────────────────────
+const sprites = {};
+for (const id of ['nara', 'ethan', 'brendan', 'james']) {
+  sprites[id] = new Image();
+  sprites[id].src = `assets/${id}_sprite.png`;
+}
+
 let _scale = 1;
 function fitCanvas() {
   _scale = Math.min(window.innerWidth / GW, window.innerHeight / GH);
@@ -217,44 +228,43 @@ function drawCrowd() {
 }
 
 function drawFloor() {
-  // Court surface — outdoor asphalt
-  const g = ctx.createLinearGradient(0, FLOOR_Y - 8, 0, GH);
-  g.addColorStop(0, '#888F96');
-  g.addColorStop(0.35, '#767D84');
-  g.addColorStop(1, '#606870');
+  // Foreground court strip — fills from floor line to bottom of game area
+  const g = ctx.createLinearGradient(0, FLOOR_Y - 12, 0, FLOOR_Y + 60);
+  g.addColorStop(0, '#C8583A');
+  g.addColorStop(1, '#A8441E');
   ctx.fillStyle = g;
-  ctx.fillRect(0, FLOOR_Y - 8, GW, GH - FLOOR_Y + 8);
+  ctx.fillRect(0, FLOOR_Y - 12, GW, 72);
 
-  // Floor junction shadow
-  ctx.strokeStyle = 'rgba(0,0,0,0.28)';
+  // Ground shadow line (horizon edge)
+  ctx.strokeStyle = 'rgba(0,0,0,0.35)';
   ctx.lineWidth = 3;
-  ctx.beginPath(); ctx.moveTo(0, FLOOR_Y - 8); ctx.lineTo(GW, FLOOR_Y - 8); ctx.stroke();
-
-  // Blue painted key / lane
-  ctx.fillStyle = 'rgba(40, 100, 210, 0.38)';
-  ctx.fillRect(210, FLOOR_Y - 8, HOOP_X + 12 - 210, GH - FLOOR_Y + 8);
+  ctx.beginPath(); ctx.moveTo(0, FLOOR_Y - 12); ctx.lineTo(GW, FLOOR_Y - 12); ctx.stroke();
 
   ctx.save();
   ctx.lineCap = 'round';
 
-  // Key outline (white)
-  ctx.strokeStyle = 'rgba(255,255,255,0.75)';
-  ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(210, FLOOR_Y - 8); ctx.lineTo(HOOP_X + 12, FLOOR_Y - 8); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(210, FLOOR_Y - 8); ctx.lineTo(210, FLOOR_Y + 20); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(HOOP_X + 12, FLOOR_Y - 8); ctx.lineTo(HOOP_X + 12, FLOOR_Y + 30); ctx.stroke();
+  // Blue key overlay on foreground strip
+  ctx.fillStyle = 'rgba(40, 100, 210, 0.45)';
+  ctx.fillRect(210, FLOOR_Y - 12, HOOP_X + 12 - 210, 60);
 
-  // 3-point arc — orange
-  ctx.strokeStyle = 'rgba(235, 100, 30, 0.88)';
+  // Key outline
+  ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(210, FLOOR_Y - 12); ctx.lineTo(HOOP_X + 12, FLOOR_Y - 12); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(210, FLOOR_Y - 12); ctx.lineTo(210, FLOOR_Y + 30); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(HOOP_X + 12, FLOOR_Y - 12); ctx.lineTo(HOOP_X + 12, FLOOR_Y + 40); ctx.stroke();
+
+  // 3-point arc
+  ctx.strokeStyle = 'rgba(235, 100, 30, 0.9)';
   ctx.lineWidth = 2.5;
   ctx.beginPath();
-  ctx.arc(HOOP_X + 12, FLOOR_Y - 8, SHOT_RANGE_3, Math.PI * 0.52, Math.PI, false);
+  ctx.arc(HOOP_X + 12, FLOOR_Y - 12, SHOT_RANGE_3, Math.PI * 0.52, Math.PI, false);
   ctx.stroke();
 
   // Center circle hint
   ctx.strokeStyle = 'rgba(255,255,255,0.45)';
   ctx.lineWidth = 1.5;
-  ctx.beginPath(); ctx.arc(35, FLOOR_Y - 8, 24, 0, Math.PI, true); ctx.stroke();
+  ctx.beginPath(); ctx.arc(35, FLOOR_Y - 12, 24, 0, Math.PI, true); ctx.stroke();
 
   ctx.restore();
 }
@@ -303,249 +313,150 @@ function drawHoop() {
 
 // ── Character Drawing ────────────────────────────────────────────
 function drawChar(id, hasBall) {
-  const p  = S.players[id];
-  const d  = CHARS[id];
-  const f  = S.frame;
-  const jy = p.jumpY;
+  const p   = S.players[id];
+  const f   = S.frame;
+  const jy  = p.jumpY;
+  const spr = sprites[id];
+  const { anim } = p;
 
   ctx.save();
   ctx.translate(p.x, p.y + jy);
-  ctx.scale(1.15, 1.15);
   if (p.facing < 0) ctx.scale(-1, 1);
 
-  const { anim } = p;
-  let legA = 0, armA = 0, scX = 1, scY = 1, bobY = 0;
-
+  // Squash / stretch / bob by animation state
+  let scX = 1, scY = 1, bobY = 0, lean = 0;
   if (anim === 'idle') {
     bobY = Math.sin(f * 0.045) * 2.5;
-    legA = Math.sin(f * 0.045) * 4;
   } else if (anim === 'run') {
-    legA = Math.sin(f * 0.28) * 30;
-    armA = -legA * 0.7;
     bobY = Math.abs(Math.sin(f * 0.28)) * -3.5;
+    lean = Math.sin(f * 0.28) * 0.08;
     scX  = 1 + Math.sin(f * 0.56) * 0.02;
   } else if (anim === 'jump') {
-    scX = 0.87; scY = 1.14; bobY = 0;
+    scX = 0.87; scY = 1.14;
   } else if (anim === 'land') {
-    scX = 1.2; scY = 0.8; bobY = 3;
+    scX = 1.2; scY = 0.82; bobY = 5;
   } else if (anim === 'celebrate') {
-    bobY  = Math.abs(Math.sin(f * 0.18)) * -12;
-    legA  = Math.sin(f * 0.18) * 20;
-    scX   = 1 + Math.abs(Math.sin(f * 0.18)) * 0.04;
+    bobY = Math.abs(Math.sin(f * 0.18)) * -14;
+    scX  = 1 + Math.abs(Math.sin(f * 0.18)) * 0.05;
   } else if (anim === 'shoot') {
-    armA = -40;
+    bobY = -8;
   } else if (anim === 'sad') {
-    bobY = 4; scY = 0.95;
+    bobY = 5; scY = 0.94;
   }
+
+  // Shadow (in un-squashed space so it stays on the floor)
+  ctx.save();
+  const shadowW = (24 - Math.abs(jy) * 0.1) * scX;
+  ctx.fillStyle = 'rgba(0,0,0,0.22)';
+  ctx.beginPath(); ctx.ellipse(0, 4 - jy * 0.12, shadowW, 6, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
 
   ctx.scale(scX, scY);
   ctx.translate(0, bobY);
+  if (lean) ctx.rotate(lean);
 
-  // Shadow
-  ctx.save();
-  ctx.scale(1 / scX, 1 / scY);
-  ctx.translate(0, -bobY);
-  const shadowY = -jy * 0.15 + 3;
-  const shadowW = 18 - Math.abs(jy) * 0.08;
-  ctx.fillStyle = 'rgba(0,0,0,0.15)';
-  ctx.beginPath(); ctx.ellipse(0, shadowY, shadowW, 5, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.restore();
-
-  const LW = 2.2;
-  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-
-  // Positions (y = 0 is feet)
-  const Ky = -25, Hy = -47, Sy = -68, Ny = -76, Hcy = -96;
-
-  // ── Legs ─────────────────────────────────────────────────
-  for (const [cx, la] of [[-7, legA], [7, -legA]]) {
-    ctx.save();
-    ctx.translate(cx, Ky + 25);
-    ctx.rotate(la * Math.PI / 180);
-    // Upper leg
-    rr(-4.5, -25, 9, 25, 3.5);
-    ctx.fillStyle = d.pants; ctx.fill();
-    ctx.strokeStyle = '#000'; ctx.lineWidth = LW; ctx.stroke();
-    // Lower leg (slight counter-rotate)
-    ctx.save();
-    ctx.rotate(-la * 0.35 * Math.PI / 180);
-    rr(-3.5, 0, 7, 22, 3);
-    ctx.fillStyle = d.pants; ctx.fill();
-    ctx.strokeStyle = '#000'; ctx.lineWidth = LW; ctx.stroke();
-    // Shoe
-    ctx.fillStyle = d.shoes;
-    ctx.beginPath(); ctx.ellipse(cx > 0 ? 4 : -4, 22, 10, 5.5, 0, 0, Math.PI * 2);
-    ctx.fill(); ctx.strokeStyle = '#000'; ctx.lineWidth = LW; ctx.stroke();
-    ctx.restore();
-    ctx.restore();
+  // Draw sprite if loaded, else skip (fallback removed for clarity)
+  if (spr && spr.complete && spr.naturalWidth > 0) {
+    const H = 175;
+    const W = H * spr.naturalWidth / spr.naturalHeight;
+    ctx.drawImage(spr, -W / 2, -H, W, H);
   }
 
-  // ── Body ─────────────────────────────────────────────────
-  rr(-12, Hy, 24, 24, 5);
-  ctx.fillStyle = d.shirt; ctx.fill();
-  ctx.strokeStyle = '#000'; ctx.lineWidth = LW; ctx.stroke();
-  // Collar / skin triangle
-  ctx.fillStyle = d.skin;
-  ctx.beginPath(); ctx.arc(0, Sy + 8, 5, 0, Math.PI * 2); ctx.fill();
-
-  // ── Arms ─────────────────────────────────────────────────
-  const baseArmL = anim === 'run' ? armA + 10  : 12;
-  const baseArmR = anim === 'run' ? armA - 10  : -12;
-  const shootLift = anim === 'shoot' ? -35 : 0;
-  const ballArm   = hasBall ? -25 + shootLift : shootLift;
-
-  for (const [cx, angle, isBallArm] of [
-    [-14, baseArmL,          false],
-    [ 14, baseArmR + ballArm, true ]
-  ]) {
-    ctx.save();
-    ctx.translate(cx, Sy + 5);
-    ctx.rotate(angle * Math.PI / 180);
-    rr(-3.5, 0, 7, 18, 3);
-    ctx.fillStyle = d.skin; ctx.fill();
-    ctx.strokeStyle = '#000'; ctx.lineWidth = LW; ctx.stroke();
-    ctx.restore();
-  }
-
-  // ── Ball (held) ───────────────────────────────────────────
+  // Ball (always drawn on top of sprite)
   if (hasBall) {
-    const bx = anim === 'shoot' ? 16 : 22;
-    const by = anim === 'shoot' ? -88 : -55;
-    drawBallAt(bx, by, 10);
+    const bx = anim === 'shoot' ? 18 : 30;
+    const by = anim === 'shoot' ? -175 : -78;
+    drawBallAt(bx, by, 13);
   }
-
-  // ── Head ─────────────────────────────────────────────────
-  circle(0, Hcy, 21, d.skin, '#000', 2.5);
-
-  // ── Hair ─────────────────────────────────────────────────
-  ctx.fillStyle = d.hair; ctx.strokeStyle = '#000'; ctx.lineWidth = 2;
-
-  if (d.hairStyle === 'long') {
-    ctx.beginPath();
-    ctx.arc(0, Hcy, 21, Math.PI * 0.85, Math.PI * 0.15, true);
-    ctx.lineTo(18, Hcy + 38); ctx.lineTo(-18, Hcy + 38); ctx.closePath();
-    ctx.fill(); ctx.stroke();
-    ctx.beginPath(); ctx.arc(0, Hcy, 21, Math.PI * 1.15, 0, false);
-    ctx.lineTo(14, Hcy + 4); ctx.lineTo(-14, Hcy + 4); ctx.closePath();
-    ctx.fill(); ctx.stroke();
-  } else if (d.hairStyle === 'short') {
-    ctx.beginPath(); ctx.arc(0, Hcy, 21, Math.PI * 1.15, 0, false);
-    ctx.lineTo(14, Hcy + 5); ctx.lineTo(-14, Hcy + 5); ctx.closePath();
-    ctx.fill(); ctx.stroke();
-  } else if (d.hairStyle === 'spiky') {
-    ctx.beginPath();
-    ctx.moveTo(-21, Hcy + 6);
-    ctx.lineTo(-16, Hcy - 12);
-    ctx.lineTo(-9,  Hcy - 36);
-    ctx.lineTo(-2,  Hcy - 15);
-    ctx.lineTo(5,   Hcy - 44);
-    ctx.lineTo(12,  Hcy - 18);
-    ctx.lineTo(18,  Hcy - 10);
-    ctx.lineTo(21,  Hcy + 6);
-    ctx.arc(0, Hcy, 21, 0, Math.PI, false);
-    ctx.closePath(); ctx.fill(); ctx.stroke();
-  } else if (d.hairStyle === 'glasses') {
-    ctx.beginPath(); ctx.arc(0, Hcy, 21, Math.PI * 1.1, 0, false);
-    ctx.lineTo(13, Hcy + 4); ctx.lineTo(-13, Hcy + 4); ctx.closePath();
-    ctx.fill(); ctx.stroke();
-  } else if (d.hairStyle === 'bob') {
-    // Sides extend to jaw line (shorter than 'long')
-    ctx.beginPath();
-    ctx.arc(0, Hcy, 21, Math.PI * 0.85, Math.PI * 0.15, true);
-    ctx.lineTo(18, Hcy + 18); ctx.lineTo(-18, Hcy + 18); ctx.closePath();
-    ctx.fill(); ctx.stroke();
-    // Top cap
-    ctx.beginPath(); ctx.arc(0, Hcy, 21, Math.PI * 1.15, 0, false);
-    ctx.lineTo(14, Hcy + 4); ctx.lineTo(-14, Hcy + 4); ctx.closePath();
-    ctx.fill(); ctx.stroke();
-    // Straight bangs fringe
-    ctx.beginPath(); ctx.moveTo(-17, Hcy - 9); ctx.lineTo(17, Hcy - 9); ctx.stroke();
-  }
-
-  // ── Face ─────────────────────────────────────────────────
-  drawFace(d, anim, Hcy, f);
 
   ctx.restore();
 }
 
 function drawFace(d, anim, hy, f) {
-  const ey = hy - 1;
-  let eyeW = 7, eyeH = 9;
-  if (anim === 'celebrate') { eyeW = 9; eyeH = 12; }
-  if (anim === 'sad')       { eyeH = 6; eyeW = 7; }
-  if (anim === 'run')       { eyeH = 8; }
+  const ey = hy - 2;
+  let eyeW = 5, eyeH = 7;
+  if (anim === 'celebrate') { eyeW = 7; eyeH = 10; }
+  if (anim === 'sad')       { eyeH = 4; eyeW = 5; }
+  if (anim === 'run')       { eyeH = 6; }
 
   // Eye whites
-  for (const ex of [-9, 9]) {
+  for (const ex of [-6, 6]) {
     ctx.beginPath(); ctx.ellipse(ex, ey, eyeW, eyeH, 0, 0, Math.PI * 2);
     ctx.fillStyle = '#FFF'; ctx.fill();
     ctx.strokeStyle = '#000'; ctx.lineWidth = 1.5; ctx.stroke();
   }
 
   // Pupils
-  const pupilOff = anim === 'sad' ? 0 : 2;
-  for (const ex of [-9, 9]) {
-    circle(ex + pupilOff, ey + 1, 3.5, '#000');
-    circle(ex + pupilOff + 1, ey - 1, 1.3, '#FFF');
+  const pupilOff = anim === 'sad' ? 0 : 1.5;
+  for (const ex of [-6, 6]) {
+    circle(ex + pupilOff, ey + 1, 2.5, '#000');
+    circle(ex + pupilOff + 1, ey - 1, 1, '#FFF');
   }
 
   // Eyebrows
-  ctx.strokeStyle = d.brow; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+  ctx.strokeStyle = d.brow; ctx.lineWidth = 2; ctx.lineCap = 'round';
   const browYOff = anim === 'celebrate' ? -4 : anim === 'sad' ? 0 : -2;
   const browSlant = anim === 'sad' ? 0.22 : anim === 'celebrate' ? -0.14 : 0;
-  for (const [ex, sl] of [[-9, browSlant], [9, -browSlant]]) {
+  for (const [ex, sl] of [[-6, browSlant], [6, -browSlant]]) {
     ctx.save(); ctx.translate(ex, ey - eyeH - 2 + browYOff); ctx.rotate(sl);
-    ctx.beginPath(); ctx.moveTo(-5.5, 0); ctx.lineTo(5.5, 0); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-4, 0); ctx.lineTo(4, 0); ctx.stroke();
     ctx.restore();
   }
 
   // Glasses for James
   if (d.hairStyle === 'glasses') {
     ctx.strokeStyle = '#222'; ctx.lineWidth = 2;
-    for (const ex of [-9, 9]) {
-      ctx.beginPath(); ctx.arc(ex, ey, eyeW + 2.5, 0, Math.PI * 2); ctx.stroke();
+    for (const ex of [-6, 6]) {
+      ctx.beginPath(); ctx.arc(ex, ey, eyeW + 2, 0, Math.PI * 2); ctx.stroke();
     }
-    ctx.beginPath(); ctx.moveTo(-9 + eyeW + 2.5, ey); ctx.lineTo(9 - eyeW - 2.5, ey); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(-9 - eyeW - 2.5, ey); ctx.lineTo(-9 - eyeW - 8, ey - 1); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(9 + eyeW + 2.5, ey); ctx.lineTo(9 + eyeW + 8, ey - 1); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-6 + eyeW + 2, ey); ctx.lineTo(6 - eyeW - 2, ey); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-6 - eyeW - 2, ey); ctx.lineTo(-6 - eyeW - 7, ey - 1); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(6 + eyeW + 2, ey); ctx.lineTo(6 + eyeW + 7, ey - 1); ctx.stroke();
   }
 
   // Mouth
-  const my = hy + 13;
+  const my = hy + 9;
   ctx.strokeStyle = '#000'; ctx.lineWidth = 2; ctx.lineCap = 'round';
   if (anim === 'celebrate') {
-    ctx.beginPath(); ctx.arc(0, my - 3, 9, 0.12, Math.PI - 0.12, false); ctx.stroke();
-    rr(-8, my - 3, 16, 6, 3); ctx.fillStyle = '#FFF'; ctx.fill();
+    ctx.beginPath(); ctx.arc(0, my - 3, 7, 0.12, Math.PI - 0.12, false); ctx.stroke();
+    rr(-6, my - 3, 12, 5, 3); ctx.fillStyle = '#FFF'; ctx.fill();
   } else if (anim === 'sad') {
-    ctx.beginPath(); ctx.arc(0, my + 5, 8, Math.PI + 0.15, -0.15, false); ctx.stroke();
+    ctx.beginPath(); ctx.arc(0, my + 5, 6, Math.PI + 0.15, -0.15, false); ctx.stroke();
   } else {
-    ctx.beginPath(); ctx.arc(0, my - 2, 6, 0.18, Math.PI - 0.18, false); ctx.stroke();
+    ctx.beginPath(); ctx.arc(0, my - 2, 4, 0.18, Math.PI - 0.18, false); ctx.stroke();
   }
 
   // Blush
   if (anim === 'celebrate' || d.name === 'NARA') {
     ctx.fillStyle = 'rgba(255,100,120,0.28)';
-    ctx.beginPath(); ctx.ellipse(-14, my - 5, 7, 4, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(14, my - 5, 7, 4, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(-10, my - 4, 5, 3, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(10, my - 4, 5, 3, 0, 0, Math.PI * 2); ctx.fill();
   }
 }
 
 // ── Ball ─────────────────────────────────────────────────────────
 function drawBallAt(x, y, r) {
-  const g = ctx.createRadialGradient(x - r * 0.3, y - r * 0.3, r * 0.1, x, y, r);
-  g.addColorStop(0, '#FF8C42');
-  g.addColorStop(0.6, '#E65C00');
-  g.addColorStop(1, '#B34000');
-  ctx.fillStyle = g;
+  // Flat orange fill — cartoon style (no gradient)
   ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = '#000'; ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.fillStyle = '#E8751A'; ctx.fill();
+  ctx.strokeStyle = '#111'; ctx.lineWidth = Math.max(1.5, r * 0.12); ctx.stroke();
 
-  // Seams
-  ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 1.2;
-  ctx.beginPath(); ctx.moveTo(x - r, y); ctx.bezierCurveTo(x - r * 0.3, y - r * 0.5, x + r * 0.3, y - r * 0.5, x + r, y); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(x - r, y); ctx.bezierCurveTo(x - r * 0.3, y + r * 0.5, x + r * 0.3, y + r * 0.5, x + r, y); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(x, y - r); ctx.arc(x, y, r, -Math.PI / 2, Math.PI / 2); ctx.stroke();
+  // Bold seam lines matching the reference animation
+  const sw = Math.max(2, r * 0.17);
+  ctx.strokeStyle = '#111'; ctx.lineWidth = sw; ctx.lineCap = 'round';
+  // Left arc seam
+  ctx.beginPath();
+  ctx.arc(x - r * 0.22, y, r * 0.88, -Math.PI * 0.58, Math.PI * 0.58, false);
+  ctx.stroke();
+  // Right arc seam
+  ctx.beginPath();
+  ctx.arc(x + r * 0.22, y, r * 0.88, Math.PI - Math.PI * 0.58, Math.PI + Math.PI * 0.58, false);
+  ctx.stroke();
+  // Horizontal equator seam
+  ctx.beginPath();
+  ctx.moveTo(x - r, y + r * 0.06);
+  ctx.bezierCurveTo(x - r * 0.4, y - r * 0.18, x + r * 0.4, y - r * 0.18, x + r, y + r * 0.06);
+  ctx.stroke();
 }
 
 function drawBall() {
@@ -796,58 +707,14 @@ function drawTitle() {
 
 // Sprite-only version (no translate) for title screen
 function drawCharSprite(id, anim, f) {
-  const d   = CHARS[id];
-  const LW  = 2;
-  const bob = Math.sin(f * 0.04) * 2.5;
-  const legA = Math.sin(f * 0.04) * 4;
-
-  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-
-  const Ky = -25, Hy = -47, Sy = -68, Hcy = -96;
+  const spr = sprites[id];
+  const bob = Math.sin(f * 0.04) * 3;
   ctx.translate(0, bob);
-
-  for (const [cx, la] of [[-7, legA], [7, -legA]]) {
-    ctx.save(); ctx.translate(cx, Ky + 25); ctx.rotate(la * Math.PI / 180);
-    rr(-4.5, -25, 9, 25, 3.5); ctx.fillStyle = d.pants; ctx.fill(); ctx.strokeStyle = '#000'; ctx.lineWidth = LW; ctx.stroke();
-    ctx.save(); ctx.rotate(-la * 0.35 * Math.PI / 180);
-    rr(-3.5, 0, 7, 22, 3); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = d.shoes; ctx.beginPath(); ctx.ellipse(cx > 0 ? 4 : -4, 22, 10, 5.5, 0, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = '#000'; ctx.lineWidth = LW; ctx.stroke();
-    ctx.restore(); ctx.restore();
+  if (spr && spr.complete && spr.naturalWidth > 0) {
+    const H = 175;
+    const W = H * spr.naturalWidth / spr.naturalHeight;
+    ctx.drawImage(spr, -W / 2, -H, W, H);
   }
-  rr(-12, Hy, 24, 24, 5); ctx.fillStyle = d.shirt; ctx.fill(); ctx.strokeStyle = '#000'; ctx.lineWidth = LW; ctx.stroke();
-  ctx.fillStyle = d.skin; ctx.beginPath(); ctx.arc(0, Sy + 8, 5, 0, Math.PI * 2); ctx.fill();
-  for (const [cx, angle] of [[-14, legA * 0.4 + 12], [14, -legA * 0.4 - 12]]) {
-    ctx.save(); ctx.translate(cx, Sy + 5); ctx.rotate(angle * Math.PI / 180);
-    rr(-3.5, 0, 7, 18, 3); ctx.fillStyle = d.skin; ctx.fill(); ctx.strokeStyle = '#000'; ctx.lineWidth = LW; ctx.stroke();
-    ctx.restore();
-  }
-  circle(0, Hcy, 21, d.skin, '#000', 2.5);
-
-  ctx.fillStyle = d.hair; ctx.strokeStyle = '#000'; ctx.lineWidth = 2;
-  if (d.hairStyle === 'long') {
-    ctx.beginPath(); ctx.arc(0, Hcy, 21, Math.PI * 0.85, Math.PI * 0.15, true);
-    ctx.lineTo(18, Hcy + 38); ctx.lineTo(-18, Hcy + 38); ctx.closePath(); ctx.fill(); ctx.stroke();
-    ctx.beginPath(); ctx.arc(0, Hcy, 21, Math.PI * 1.15, 0, false);
-    ctx.lineTo(14, Hcy + 4); ctx.lineTo(-14, Hcy + 4); ctx.closePath(); ctx.fill(); ctx.stroke();
-  } else if (d.hairStyle === 'short') {
-    ctx.beginPath(); ctx.arc(0, Hcy, 21, Math.PI * 1.15, 0, false);
-    ctx.lineTo(14, Hcy + 5); ctx.lineTo(-14, Hcy + 5); ctx.closePath(); ctx.fill(); ctx.stroke();
-  } else if (d.hairStyle === 'spiky') {
-    ctx.beginPath(); ctx.moveTo(-21, Hcy+6); ctx.lineTo(-16, Hcy-12); ctx.lineTo(-9, Hcy-36);
-    ctx.lineTo(-2, Hcy-15); ctx.lineTo(5, Hcy-44); ctx.lineTo(12, Hcy-18); ctx.lineTo(18, Hcy-10);
-    ctx.lineTo(21, Hcy+6); ctx.arc(0, Hcy, 21, 0, Math.PI, false); ctx.closePath(); ctx.fill(); ctx.stroke();
-  } else if (d.hairStyle === 'glasses') {
-    ctx.beginPath(); ctx.arc(0, Hcy, 21, Math.PI * 1.1, 0, false);
-    ctx.lineTo(13, Hcy + 4); ctx.lineTo(-13, Hcy + 4); ctx.closePath(); ctx.fill(); ctx.stroke();
-  } else if (d.hairStyle === 'bob') {
-    ctx.beginPath();
-    ctx.arc(0, Hcy, 21, Math.PI * 0.85, Math.PI * 0.15, true);
-    ctx.lineTo(18, Hcy + 18); ctx.lineTo(-18, Hcy + 18); ctx.closePath(); ctx.fill(); ctx.stroke();
-    ctx.beginPath(); ctx.arc(0, Hcy, 21, Math.PI * 1.15, 0, false);
-    ctx.lineTo(14, Hcy + 4); ctx.lineTo(-14, Hcy + 4); ctx.closePath(); ctx.fill(); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(-17, Hcy - 9); ctx.lineTo(17, Hcy - 9); ctx.stroke();
-  }
-  drawFace(d, anim, Hcy, f);
 }
 
 // ── Game Over Screen ─────────────────────────────────────────────
@@ -1520,8 +1387,12 @@ function loop() {
   updateScoreFlash();
 
   // ── Draw ────────────────────────────────────────────────────────
-  drawSky();
-  drawCrowd();
+  if (courtBg.complete && courtBg.naturalWidth > 0) {
+    ctx.drawImage(courtBg, 0, 0, GW, FLOOR_Y + 30);
+  } else {
+    drawSky();
+    drawCrowd();
+  }
   drawFloor();
   drawHoop();
 
