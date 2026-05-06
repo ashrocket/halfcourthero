@@ -49,6 +49,43 @@ for (const id of ['nara', 'ethan', 'brendan', 'james']) {
 
 let _scale = 1, _rotated = false;
 
+// ── Audio ────────────────────────────────────────────────────────
+let _audioCtx = null;
+function getAudio() {
+  if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return _audioCtx;
+}
+function playTone(freq, dur, type = 'sine', gain = 0.18, decay = true) {
+  try {
+    const ac = getAudio();
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.connect(g); g.connect(ac.destination);
+    o.type = type; o.frequency.value = freq;
+    g.gain.setValueAtTime(gain, ac.currentTime);
+    if (decay) g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + dur);
+    o.start(); o.stop(ac.currentTime + dur);
+  } catch(e) {}
+}
+function sfxShoot() { playTone(220, 0.12, 'square', 0.1); }
+function sfxScore(pts) {
+  const notes = pts === 3
+    ? [523, 784, 1047, 1319, 1047] // rising + extra note for 3pt
+    : [523, 659, 784, 1047];
+  notes.forEach((f, i) => { setTimeout(() => playTone(f, 0.18, 'sine', 0.2), i * 75); });
+}
+function sfxDunk() {
+  playTone(110, 0.18, 'square', 0.25);
+  setTimeout(() => playTone(220, 0.15, 'sine', 0.2), 60);
+  setTimeout(() => playTone(440, 0.12, 'sine', 0.18), 140);
+}
+function sfxAlleyOop() {
+  [330, 494, 659, 880].forEach((f, i) => { setTimeout(() => playTone(f, 0.15, 'sine', 0.22), i * 60); });
+}
+function sfxMiss()  { playTone(180, 0.2, 'sawtooth', 0.08); }
+function sfxSteal() { playTone(440, 0.08, 'square', 0.12); setTimeout(() => playTone(660, 0.08, 'square', 0.12), 80); }
+function sfxClock() { playTone(880, 0.06, 'square', 0.15); }
+function sfxRimHit() { playTone(320, 0.06, 'square', 0.06); }
+
 function fitCanvas() {
   const lw = window.innerWidth, lh = window.innerHeight;
   _rotated = false;
@@ -152,17 +189,20 @@ function mkPlayer(id, team, x, facing) {
     hasBall: false,
     ai: team === 'b',
     aiTimer: Math.random() * 60,
+    landStartFrame: 0,
   };
 }
 
 function initState() {
+  const prevDiff = S && S._difficulty;
   S = {
     screen: 'title',
+    _difficulty: prevDiff || 'normal',
     frame: 0,
     score: [0, 0],
     possession: 'a',
 
-    ball: { x: 100, y: FLOOR_Y - 30, vx: 0, vy: 0, inAir: false, carrier: 'nara' },
+    ball: { x: 100, y: FLOOR_Y - 30, vx: 0, vy: 0, inAir: false, carrier: 'nara', rot: 0 },
 
     players: {
       nara:    mkPlayer('nara',    'a', 100,  1),
@@ -185,18 +225,24 @@ function initState() {
     blockHeld: false,
     blockPower: 0,          // 0–100 fills while held on defense
 
-    // Steal mash
-    stealTaps: 0,
-    lastStealTapTime: 0,
-
-    // Double-tap pass
-    passDoubleTapPending: false,
-    lastPassTapTime: 0,
-
     // Score flash
     scoreFlash: null,
     pauseTimer: 0,
     scored: false,
+    showInfo: false,
+    switchFlash: null,
+    confetti: [],
+    ballTrail: [],
+    shotClock: 600, // 10 seconds at 60fps
+    streak: 0,
+    shake: 0,
+    paused: false,
+    stats: { shots: 0, made: 0, steals: 0, blocks: 0, threes: 0, alleyOops: 0 },
+    hoopFlash: 0,
+    _fastBreak: 0,
+
+    // Onboarding
+    onboardingTimer: 180, // ~3 seconds at 60fps
   };
 
   S.players.nara.hasBall = true;
@@ -297,7 +343,23 @@ function drawHoop() {
   ctx.beginPath(); ctx.moveTo(bx, RIM_Y); ctx.lineTo(hx - RIM_R, RIM_Y); ctx.stroke();
   ctx.beginPath(); ctx.ellipse(hx, RIM_Y, RIM_R, RIM_R * 0.3, 0, 0, Math.PI * 2); ctx.stroke();
 
-  ctx.strokeStyle = '#FFF'; ctx.lineWidth = 1.2;
+  // Net — glows yellow-white on score
+  const flash = S && S.hoopFlash ? S.hoopFlash : 0;
+  const netColor = flash > 0 ? `rgba(255,240,${Math.floor(flash * 10)},${0.6 + flash / 25 * 0.4})` : '#FFF';
+  ctx.strokeStyle = netColor; ctx.lineWidth = flash > 0 ? 2 : 1.2;
+  if (flash > 0) {
+    // Expanding swoosh ring on score
+    const age = 25 - flash;
+    const rExp = RIM_R + age * 3.5;
+    const ringAlpha = flash / 25 * 0.55;
+    ctx.save();
+    ctx.globalAlpha = ringAlpha;
+    ctx.strokeStyle = '#FFD700';
+    ctx.lineWidth = 3 - age * 0.1;
+    ctx.beginPath(); ctx.ellipse(hx, RIM_Y, rExp, rExp * 0.28, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+    S.hoopFlash--;
+  }
   const segs = 8, nh = 22;
   for (let i = 0; i <= segs; i++) {
     const a = (i / segs) * Math.PI * 2;
@@ -330,22 +392,59 @@ function drawChar(id, hasBall) {
 
   let scX = 1, scY = 1, bobY = 0, lean = 0;
   if (anim === 'idle') {
-    bobY = Math.sin(f * 0.045) * 2.5;
+    const phase = f * 0.05;
+    bobY = Math.sin(phase) * 3.5;
+    scX = 1 + Math.sin(phase) * 0.012;
+    scY = 1 - Math.sin(phase) * 0.012;
   } else if (anim === 'run') {
-    bobY = Math.abs(Math.sin(f * 0.28)) * -3.5;
-    lean = Math.sin(f * 0.28) * 0.08;
-    scX  = 1 + Math.sin(f * 0.56) * 0.02;
+    const phase = f * 0.28;
+    const intensity = p.ai ? 1 : Math.min(1, Math.hypot(p.vx, p.vy) / 3.5);
+    bobY = -Math.abs(Math.sin(phase)) * 8 * intensity;
+    lean = Math.sin(phase) * 0.13 * intensity;
+    const sq = Math.cos(phase * 2);
+    scX = 1 + sq * 0.07 * intensity;
+    scY = 1 - sq * 0.05 * intensity;
   } else if (anim === 'jump') {
-    scX = 0.87; scY = 1.14;
+    scX = 0.87; scY = 1.16;
   } else if (anim === 'land') {
-    scX = 1.2; scY = 0.82; bobY = 5;
+    const startF = p.landStartFrame > 0 ? p.landStartFrame : f;
+    const age = Math.min(f - startF, 18);
+    const t = age / 18;
+    scX = 1 + (1 - t) * 0.22;
+    scY = 1 - (1 - t) * 0.20;
+    bobY = (1 - t) * 6;
   } else if (anim === 'celebrate') {
-    bobY = Math.abs(Math.sin(f * 0.18)) * -14;
-    scX  = 1 + Math.abs(Math.sin(f * 0.18)) * 0.05;
+    const phase = f * 0.22;
+    const lift = Math.abs(Math.sin(phase));
+    bobY = -lift * 16;
+    scX = 1 + (1 - lift) * 0.13 - lift * 0.04;
+    scY = 1 - (1 - lift) * 0.09 + lift * 0.07;
   } else if (anim === 'shoot') {
-    bobY = -8;
+    bobY = -10;
+    scX = 0.92; scY = 1.10;
   } else if (anim === 'sad') {
-    bobY = 5; scY = 0.94;
+    bobY = 6;
+    scX = 1.05; scY = 0.92;
+  }
+
+  // Steal range ring flash
+  if (p._stealRing > 0) {
+    const age = 12 - p._stealRing;
+    const rr2 = 30 + age * 3.5;
+    ctx.save();
+    ctx.globalAlpha = p._stealRing / 12 * 0.6;
+    ctx.strokeStyle = '#FFD700';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.ellipse(0, 0, rr2, rr2 * 0.4, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+    p._stealRing--;
+  }
+
+  // Incoming pass glow
+  if (S.ball._pass && S.ball._passTarget === id) {
+    const pulse = 0.4 + Math.abs(Math.sin(S.frame * 0.3)) * 0.5;
+    ctx.fillStyle = `rgba(255,215,0,${pulse * 0.25})`;
+    ctx.beginPath(); ctx.ellipse(0, 0, 32, 32, 0, 0, Math.PI * 2); ctx.fill();
   }
 
   // Shadow
@@ -353,10 +452,34 @@ function drawChar(id, hasBall) {
   const shadowW = (24 - Math.abs(jy) * 0.1) * scX;
   ctx.fillStyle = 'rgba(0,0,0,0.22)';
   ctx.beginPath(); ctx.ellipse(0, 4 - jy * 0.12, shadowW, 6, 0, 0, Math.PI * 2); ctx.fill();
+  // Active player glow ring (offense and defense)
+  if (id === S.activeHuman) {
+    const pulse = 0.55 + Math.sin(f * 0.15) * 0.3;
+    ctx.globalAlpha = pulse;
+    // Hot hand: ring turns orange/red when on fire streak
+    const onFire = S.streak >= 3;
+    const ringColor = onFire
+      ? (S.streak >= 5 ? '#FF3300' : '#FF8C00')
+      : CHARS[id].hue;
+    ctx.strokeStyle = ringColor;
+    if (onFire) ctx.shadowColor = ringColor;
+    ctx.lineWidth = onFire ? 4 : 3;
+    ctx.beginPath(); ctx.ellipse(0, 4 - jy * 0.12, shadowW + 13, 10, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.shadowColor = 'transparent';
+    ctx.globalAlpha = 1;
+    // Small name tag
+    ctx.save();
+    ctx.scale(1 / (dsc * (p.facing < 0 ? -1 : 1)), 1 / dsc); // undo depth scale for text
+    ctx.fillStyle = CHARS[id].hue;
+    ctx.font = 'bold 8px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    ctx.letterSpacing = '0.08em';
+    ctx.fillText(CHARS[id].name, 0, -185 / dsc);
+    ctx.restore();
+  }
   ctx.restore();
 
-  ctx.scale(scX, scY);
   ctx.translate(0, bobY);
+  ctx.scale(scX, scY);
   if (lean) ctx.rotate(lean);
 
   if (spr && spr.complete && spr.naturalWidth > 0) {
@@ -427,6 +550,15 @@ function drawFace(d, anim, hy, f) {
 
 // ── Ball ─────────────────────────────────────────────────────────
 function drawBallAt(x, y, r) {
+  // Fire glow on streak
+  if (S.streak >= 3 && S.ball && !S.ball.carrier) {
+    ctx.save();
+    ctx.shadowColor = S.streak >= 5 ? '#FF2200' : '#FF8800';
+    ctx.shadowBlur = 18;
+    ctx.beginPath(); ctx.arc(x, y, r + 3, 0, Math.PI * 2);
+    ctx.fillStyle = 'transparent'; ctx.fill();
+    ctx.restore();
+  }
   ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
   ctx.fillStyle = '#E8751A'; ctx.fill();
   ctx.strokeStyle = '#111'; ctx.lineWidth = Math.max(1.5, r * 0.12); ctx.stroke();
@@ -466,10 +598,74 @@ function drawBall() {
   const b = S.ball;
   if (b.carrier) return;
 
+  // Perfect shot trail
+  if (b.inAir && b._perfect && S.frame % 2 === 0) {
+    S.thoughts.push({
+      x: b.x + (Math.random() - 0.5) * 10,
+      y: b.y + (Math.random() - 0.5) * 10,
+      text: '✨', ttl: 15, maxTtl: 15, dx: 0
+    });
+  }
+
   ctx.fillStyle = 'rgba(0,0,0,0.12)';
   ctx.beginPath(); ctx.ellipse(b.x, FLOOR_Y + 4, 12 - (FLOOR_Y - b.y) * 0.04, 4, 0, 0, Math.PI * 2); ctx.fill();
 
+  // Draw with spin rotation
+  ctx.save();
+  ctx.translate(b.x, b.y);
+  ctx.rotate(b.rot || 0);
+  ctx.translate(-b.x, -b.y);
   drawBallAt(b.x, b.y, 12);
+  ctx.restore();
+}
+
+function drawShotTrajectory() {
+  if (!S.shootHeld || S.possession !== 'a') return;
+  const ap = S.players[S.activeHuman];
+  if (!ap.hasBall) return;
+
+  const power = S.shootPower;
+  const fromX = ap.x, fromY = ap.y + ap.jumpY - 55;
+  const dx = HOOP_X - fromX;
+  const dy = RIM_Y - fromY;
+  const dist = Math.abs(fromX - HOOP_X);
+  if (dist > SHOT_RANGE_3 + 30) return;
+
+  const tFly = 35 + dist * 0.08;
+  const vx0 = dx / tFly;
+  const vy0 = (dy - 0.225 * tFly * tFly) / tFly;
+
+  const inGreen = power >= POWER_GREEN_LO && power <= POWER_GREEN_HI;
+  const isPerfect = power >= 60 && power <= 68;
+
+  // Color arc by power quality
+  let arcColor;
+  if (isPerfect)      arcColor = 'rgba(0,255,136,0.55)';
+  else if (inGreen)   arcColor = 'rgba(80,220,80,0.4)';
+  else if (power < 5) arcColor = 'rgba(255,255,255,0.18)';
+  else                arcColor = 'rgba(255,160,30,0.32)';
+
+  ctx.save();
+  ctx.setLineDash([4, 7]);
+  ctx.strokeStyle = arcColor;
+  ctx.lineWidth = inGreen ? 2 : 1.5;
+  ctx.beginPath();
+  let bx = fromX, by = fromY, bvy = vy0;
+  ctx.moveTo(bx, by);
+  for (let t = 1; t <= tFly; t++) {
+    bvy += 0.45;
+    bx += vx0;
+    by += bvy;
+    if (t % 2 === 0) ctx.lineTo(bx, by);
+    if (by > FLOOR_Y) break;
+  }
+  ctx.stroke();
+  ctx.setLineDash([]);
+  // Endpoint dot at rim — brighter when in sweet spot
+  ctx.beginPath(); ctx.arc(HOOP_X, RIM_Y, inGreen ? 5 : 3.5, 0, Math.PI * 2);
+  ctx.fillStyle = inGreen ? 'rgba(0,255,136,0.7)' : 'rgba(255,255,255,0.3)';
+  ctx.fill();
+  ctx.restore();
 }
 
 // ── Power Indicator (hoop ring shows green zone) ──────────────────
@@ -525,18 +721,144 @@ function drawThoughts() {
   }
 }
 
+function drawOnboarding() {
+  if (S.onboardingTimer <= 0) return;
+  
+  const alpha = Math.min(1, S.onboardingTimer / 30) * 0.7;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  
+  const cx = 90, cy = 650, r = 35;
+  ctx.strokeStyle = '#FFFFFF';
+  ctx.lineWidth = 3;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  // Draw 4 arrows (Up, Down, Left, Right)
+  const drawArr = (x, y, ang) => {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(ang);
+    ctx.beginPath();
+    ctx.moveTo(-8, 5); ctx.lineTo(0, -5); ctx.lineTo(8, 5);
+    ctx.stroke();
+    ctx.restore();
+  };
+
+  drawArr(cx, cy - r, 0);          // Up
+  drawArr(cx, cy + r, Math.PI);    // Down
+  drawArr(cx - r, cy, -Math.PI/2); // Left
+  drawArr(cx + r, cy, Math.PI/2);  // Right
+
+  ctx.fillStyle = '#FFF';
+  ctx.font = 'bold 10px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('MOVE IN 3D', cx, cy + 70);
+  
+  ctx.restore();
+}
+
+// ── Confetti + Trail + Switch Flash ─────────────────────────────
+function drawBallTrail() {
+  const trail = S.ballTrail;
+  // Hot trail when on fire streak, rainbow 3pt trail
+  const onFire = S.streak >= 3;
+  const is3pt = S.ball._fromX !== undefined && Math.abs(S.ball._fromX - HOOP_X) > SHOT_RANGE_2;
+  for (let i = 0; i < trail.length; i++) {
+    const t = i / trail.length;
+    const alpha = t * 0.42;
+    const r = 3 + t * 5;
+    ctx.beginPath(); ctx.arc(trail[i].x, trail[i].y, r, 0, Math.PI * 2);
+    if (is3pt) {
+      const hue = 200 + t * 160;
+      ctx.fillStyle = `hsla(${hue},100%,65%,${alpha})`;
+    } else if (onFire) {
+      ctx.fillStyle = `rgba(255,${Math.floor(80 + t * 120)},0,${alpha})`;
+    } else {
+      ctx.fillStyle = `rgba(232,117,26,${alpha})`;
+    }
+    ctx.fill();
+  }
+}
+
+function updateAndDrawConfetti() {
+  for (let i = S.confetti.length - 1; i >= 0; i--) {
+    const c = S.confetti[i];
+    c.vy += 0.4;
+    c.x += c.vx; c.y += c.vy;
+    c.rot += c.dRot;
+    c.ttl--;
+    if (c.ttl <= 0 || c.y > FLOOR_Y + 50) { S.confetti.splice(i, 1); continue; }
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, c.ttl / 20);
+    ctx.translate(c.x, c.y); ctx.rotate(c.rot);
+    ctx.fillStyle = c.color;
+    ctx.fillRect(-c.size / 2, -c.size / 4, c.size, c.size / 2);
+    ctx.restore();
+  }
+}
+
+function drawSwitchFlash() {
+  if (!S.switchFlash || S.switchFlash.ttl <= 0) return;
+  const pct = S.switchFlash.ttl / 70;
+  S.switchFlash.ttl--;
+  ctx.save();
+  ctx.globalAlpha = pct * 0.9;
+  ctx.fillStyle = S.switchFlash.color;
+  ctx.font = `bold ${14 + (1 - pct) * 8}px monospace`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.letterSpacing = '0.1em';
+  ctx.fillText('NOW: ' + S.switchFlash.name, GW / 2, GH / 2 - 40);
+  ctx.restore();
+}
+
 // ── HUD / Score Bar ──────────────────────────────────────────────
+const INFO_LINES = [
+  '🏀 HALF COURT HERO  v0.6',
+  '',
+  '🎮 CONTROLS',
+  '  Square pad — move in 3D',
+  '  SHOOT — hold to charge, release',
+  '    Quick tap = pump fake!',
+  '    Green ring = sweet spot!',
+  '  PASS — tap to pass / alley-oop',
+  '  BLOCK / STEAL on defense',
+  '  On defense: tap player to SWITCH',
+  '',
+  '✨ FEATURES',
+  '  🙌 Alley-oop near basket',
+  '  ⚡ Fast break after steal/rebound',
+  '  🔥 On Fire + Heat Check streak',
+  '  💥 Dunk / Layup near basket',
+  '  🤙 AND ONE chance on contact',
+  '  Tie game + Game Point drama',
+  '  Comeback mechanic',
+  '  Defenders press & intercept',
+  '  Career stats saved locally',
+];
+
 function drawHUD() {
   ctx.fillStyle = '#1a0a3e';
   ctx.fillRect(0, 0, GW, 55);
 
+  // Score glow on game point
+  if (S.score[0] === WIN_SCORE - 1) {
+    const gp = 0.4 + Math.sin(S.frame * 0.12) * 0.3;
+    ctx.shadowColor = CHARS.nara.hue; ctx.shadowBlur = 14 * gp;
+  }
   ctx.fillStyle = CHARS.nara.hue;
   ctx.font = 'bold 32px monospace';
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillText(S.score[0], 80, 28);
+  ctx.shadowBlur = 0;
 
+  if (S.score[1] === WIN_SCORE - 1) {
+    const gp = 0.4 + Math.sin(S.frame * 0.12) * 0.3;
+    ctx.shadowColor = CHARS.brendan.hue; ctx.shadowBlur = 14 * gp;
+  }
   ctx.fillStyle = CHARS.brendan.hue;
   ctx.fillText(S.score[1], GW - 80, 28);
+  ctx.shadowBlur = 0;
 
   ctx.fillStyle = 'rgba(255,255,255,0.15)';
   ctx.fillRect(GW / 2 - 1, 8, 2, 38);
@@ -545,7 +867,81 @@ function drawHUD() {
   ctx.fillStyle = 'rgba(255,255,255,0.5)';
   ctx.fillText('NARA\'S ROOM', 80, 47);
   ctx.fillText('ALL-STARS', GW - 80, 47);
-  ctx.fillText('FIRST TO ' + WIN_SCORE, GW / 2, 28);
+
+  // Score differential or "TIED"
+  const diff = S.score[0] - S.score[1];
+  if (diff === 0) {
+    ctx.fillStyle = 'rgba(255,255,255,0.45)';
+    ctx.fillText('TIED', GW / 2, 28);
+  } else {
+    const leader = diff > 0 ? CHARS.nara.hue : CHARS.brendan.hue;
+    ctx.fillStyle = leader;
+    ctx.fillText((diff > 0 ? '+' : '') + diff, GW / 2, 28);
+  }
+
+  // Shot clock
+  if (S.screen === 'playing') {
+    const secs = Math.ceil(S.shotClock / 60);
+    const urgent = secs <= 3;
+    if (urgent && S.possession === 'a') {
+      const pulse = 0.25 + Math.sin(S.frame * 0.5) * 0.18;
+      ctx.save();
+      ctx.fillStyle = `rgba(255,40,40,${pulse})`;
+      ctx.fillRect(GW / 2 - 20, 33, 40, 16);
+      ctx.restore();
+    }
+    ctx.font = `bold 11px monospace`; ctx.letterSpacing = '0';
+    ctx.fillStyle = urgent && S.possession === 'a' ? '#FF4444' : 'rgba(255,255,255,0.45)';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(secs + 's', GW / 2, 44);
+  }
+
+  // ON FIRE / fast break banners
+  if (S.screen === 'playing' && S._fastBreak > 0) {
+    const pct = S._fastBreak / 150;
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, pct * 3);
+    ctx.fillStyle = 'rgba(255,140,0,0.18)';
+    ctx.fillRect(0, 55, GW, 20);
+    ctx.font = 'bold 11px monospace'; ctx.letterSpacing = '0.08em';
+    ctx.fillStyle = '#FFB300';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('⚡ FAST BREAK ⚡', GW / 2, 65);
+    ctx.restore();
+  } else if (S.screen === 'playing' && S.streak >= 3) {
+    ctx.save();
+    ctx.font = 'bold 10px monospace'; ctx.letterSpacing = '0';
+    ctx.fillStyle = S.streak >= 5 ? '#FF4500' : '#FF8C00';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    const fireLabel = S.streak >= 5 ? '🔥🔥 UNSTOPPABLE ×' + S.streak : '🔥 ON FIRE ×' + S.streak;
+    ctx.fillText(fireLabel, 18, 12);
+    ctx.restore();
+  }
+
+  // Info button
+  ctx.letterSpacing = '0';
+  circle(374, 14, 11, '#1a0a3e', 'rgba(255,255,255,0.3)', 1.5);
+  ctx.fillStyle = 'rgba(255,255,255,0.6)';
+  ctx.font = 'bold 12px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('i', 374, 15);
+
+  // Info panel
+  if (S.showInfo) {
+    ctx.save();
+    ctx.fillStyle = 'rgba(15,5,40,0.95)';
+    fillRR(20, 60, GW - 40, INFO_LINES.length * 18 + 24, 10, 'rgba(15,5,40,0.95)', 'rgba(255,255,255,0.2)', 1.5);
+    ctx.font = '11px monospace'; ctx.letterSpacing = '0';
+    let iy = 78;
+    for (const line of INFO_LINES) {
+      const isBold = !line.startsWith('  ') && line.length > 0;
+      ctx.font = (isBold ? 'bold ' : '') + '11px monospace';
+      ctx.fillStyle = line.startsWith('  ') ? 'rgba(255,255,255,0.7)' : '#FFF';
+      ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+      ctx.fillText(line, 34, iy);
+      iy += 18;
+    }
+    ctx.restore();
+  }
 
   if (S.scoreFlash && S.scoreFlash.ttl > 0) {
     const pct = S.scoreFlash.ttl / 70;
@@ -565,16 +961,25 @@ function drawControls() {
   const power  = isAttacking ? S.shootPower : S.blockPower;
   const isHeld = isAttacking ? S.shootHeld  : S.blockHeld;
 
-  // Joystick zone (left)
+  // Joystick zone (left) — square pad
+  const JOY_SZ = 110; // side length
+  const JOY_CX = 90, JOY_CY = 650;
   if (!S.joy.active) {
     ctx.fillStyle = 'rgba(255,255,255,0.04)';
-    ctx.beginPath(); ctx.arc(90, 650, 55, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.1)'; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,0.1)'; ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.roundRect(JOY_CX - JOY_SZ / 2, JOY_CY - JOY_SZ / 2, JOY_SZ, JOY_SZ, 12);
+    ctx.fill(); ctx.stroke();
     ctx.fillStyle = 'rgba(255,255,255,0.12)';
     ctx.font = '10px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText('MOVE', 90, 650);
+    ctx.fillText('MOVE', JOY_CX, JOY_CY);
   } else {
-    circle(S.joy.ox, S.joy.oy, 55, 'rgba(255,255,255,0.06)', 'rgba(255,255,255,0.2)', 1.5);
+    const hw = JOY_SZ / 2;
+    ctx.fillStyle = 'rgba(255,255,255,0.06)';
+    ctx.strokeStyle = 'rgba(255,255,255,0.2)'; ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.roundRect(S.joy.ox - hw, S.joy.oy - hw, JOY_SZ, JOY_SZ, 12);
+    ctx.fill(); ctx.stroke();
     const kx = S.joy.ox + S.joy.dx, ky = S.joy.oy + S.joy.dy;
     circle(kx, ky, 26, 'rgba(255,255,255,0.2)', 'rgba(255,255,255,0.4)', 2);
   }
@@ -587,28 +992,50 @@ function drawControls() {
 
   circle(300, 640, 42, `rgba(0,0,0,${btnAlpha})`, actionColor, 2.5);
 
-  // Power arc fills clockwise
+  // AC-style: shrinking circle that fills as power builds
   if (isHeld && power > 0) {
+    const t = power / 100;
+    const maxR = 70, btnR = 44;
+    const r = maxR - (maxR - btnR) * t;
     const startA = -Math.PI / 2;
-    const endA   = startA + (power / 100) * Math.PI * 2;
+    const fillA  = startA + t * Math.PI * 2;
 
-    // Green zone hint arc (always visible while held on offense)
+    // Green target band (the radii where the sweet spot lives)
     if (isAttacking) {
-      const gsA = startA + (POWER_GREEN_LO / 100) * Math.PI * 2;
-      const geA = startA + (POWER_GREEN_HI / 100) * Math.PI * 2;
+      const rLo = maxR - (maxR - btnR) * (POWER_GREEN_LO / 100);
+      const rHi = maxR - (maxR - btnR) * (POWER_GREEN_HI / 100);
       ctx.beginPath();
-      ctx.arc(300, 640, 48, gsA, geA);
-      ctx.strokeStyle = 'rgba(0,255,136,0.3)';
-      ctx.lineWidth = 9;
+      ctx.arc(300, 640, (rLo + rHi) / 2, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(0,255,136,0.35)';
+      ctx.lineWidth = rLo - rHi + 5;
       ctx.stroke();
     }
 
-    // Fill arc
+    // Background ring
+    ctx.beginPath(); ctx.arc(300, 640, r, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(255,255,255,0.07)';
+    ctx.lineWidth = 7; ctx.stroke();
+
+    // Filled pie sector
+    ctx.save();
+    ctx.globalAlpha = 0.38;
+    ctx.fillStyle = inGreen ? '#00FF88' : actionColor;
     ctx.beginPath();
-    ctx.arc(300, 640, 48, startA, endA);
+    ctx.moveTo(300, 640);
+    ctx.arc(300, 640, r, startA, fillA);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+
+    // Bright arc edge on the fill
+    ctx.beginPath(); ctx.arc(300, 640, r, startA, fillA);
     ctx.strokeStyle = inGreen ? '#00FF88' : actionColor;
-    ctx.lineWidth = 5;
-    ctx.stroke();
+    ctx.lineWidth = 3; ctx.stroke();
+
+    // Dim circle outline
+    ctx.beginPath(); ctx.arc(300, 640, r, 0, Math.PI * 2);
+    ctx.strokeStyle = inGreen ? 'rgba(0,255,136,0.45)' : 'rgba(255,255,255,0.15)';
+    ctx.lineWidth = 1.5; ctx.stroke();
   }
 
   ctx.fillStyle = inGreen ? '#00FF88' : actionColor;
@@ -622,20 +1049,6 @@ function drawControls() {
   ctx.fillStyle = passColor;
   ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillText(passLabel, 300, 710);
-
-  // Double-tap pass pending hint
-  if (isAttacking && S.passDoubleTapPending) {
-    ctx.fillStyle = 'rgba(255,215,0,0.9)';
-    ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center';
-    ctx.fillText('AGAIN!', 300, 692);
-  }
-
-  // Steal tap counter
-  if (!isAttacking && S.stealTaps > 0) {
-    ctx.fillStyle = 'rgba(255,215,0,0.9)';
-    ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center';
-    ctx.fillText('×' + S.stealTaps, 300, 692);
-  }
 
   // Hold hint when button not pressed
   if (!isHeld) {
@@ -723,11 +1136,25 @@ function drawTitle() {
   ctx.font = 'bold 16px monospace'; ctx.textAlign = 'center';
   ctx.fillText('VS', GW / 2, 347);
 
+  // Difficulty buttons
+  const diff = S._difficulty || 'normal';
+  const diffBtns = [['easy','EASY','#32CD32'],['normal','NORMAL','#FFD700'],['hard','HARD','#FF4444']];
+  let bx = GW / 2 - 105;
+  for (const [key, label, color] of diffBtns) {
+    const sel = diff === key;
+    fillRR(bx, 410, 64, 24, 8, sel ? color : 'rgba(0,0,0,0.4)', sel ? '#FFF' : color, sel ? 2 : 1.5);
+    ctx.fillStyle = sel ? '#111' : color;
+    ctx.font = (sel ? 'bold ' : '') + '10px monospace';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.letterSpacing = '0';
+    ctx.fillText(label, bx + 32, 422);
+    bx += 72;
+  }
+
   const tapAlpha = 0.5 + Math.sin(S.frame * 0.07) * 0.4;
   ctx.fillStyle = `rgba(255,255,255,${tapAlpha})`;
   ctx.font = 'bold 14px monospace'; ctx.textAlign = 'center';
   ctx.letterSpacing = '0.25em';
-  ctx.fillText('TAP TO PLAY', GW / 2, 450);
+  ctx.fillText('TAP TO PLAY', GW / 2, 465);
 
   ctx.fillStyle = 'rgba(255,255,255,0.2)';
   ctx.font = '9px monospace'; ctx.letterSpacing = '0.15em';
@@ -736,8 +1163,12 @@ function drawTitle() {
 
 function drawCharSprite(id, anim, f) {
   const spr = sprites[id];
-  const bob = Math.sin(f * 0.04) * 3;
+  const phase = f * 0.05;
+  const bob = Math.sin(phase) * 4;
+  const scX = 1 + Math.sin(phase) * 0.015;
+  const scY = 1 - Math.sin(phase) * 0.015;
   ctx.translate(0, bob);
+  ctx.scale(scX, scY);
   if (spr && spr.complete && spr.naturalWidth > 0) {
     const H = 175;
     const W = H * spr.naturalWidth / spr.naturalHeight;
@@ -787,10 +1218,38 @@ function drawGameOver() {
     S.players[ids[i]] = orig;
   }
 
+  // Stats panel
+  const st = S.stats;
+  const pct = st.shots > 0 ? Math.round(st.made / st.shots * 100) : 0;
+  let best = {};
+  try { best = JSON.parse(localStorage.getItem('hch_best') || '{}'); } catch(e) {}
+  const statLines = [
+    ['FIELD GOALS', `${st.made}/${st.shots}  (${pct}%)`, best.fgPct ? `BEST ${best.fgPct}%` : ''],
+    ['3-POINTERS', `${st.threes || 0}`, ''],
+    ['STEALS', `${st.steals}`, ''],
+    ['BLOCKS', `${st.blocks}`, ''],
+    ['HOT STREAK', `${S.streak}`, best.streak ? `BEST ${best.streak}` : ''],
+    best.wins ? ['CAREER WINS', `${best.wins}`, ''] : null,
+  ].filter(Boolean);
+  fillRR(GW/2 - 145, 415, 290, statLines.length * 24 + 20, 10, 'rgba(0,0,0,0.4)', 'rgba(255,255,255,0.1)', 1);
+  ctx.font = '10px monospace'; ctx.letterSpacing = '0';
+  for (let i = 0; i < statLines.length; i++) {
+    const [label, val, bestVal] = statLines[i];
+    ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.textAlign = 'left';
+    ctx.fillText(label, GW/2 - 130, 432 + i * 24);
+    ctx.fillStyle = '#FFF'; ctx.textAlign = 'right';
+    ctx.fillText(val, GW/2 + 70, 432 + i * 24);
+    if (bestVal) {
+      ctx.fillStyle = '#FFD700'; ctx.font = '8px monospace';
+      ctx.fillText(bestVal, GW/2 + 130, 432 + i * 24);
+      ctx.font = '10px monospace';
+    }
+  }
+
   const tapAlpha = 0.5 + Math.sin(S.frame * 0.07) * 0.4;
   ctx.fillStyle = `rgba(255,255,255,${tapAlpha})`;
   ctx.font = 'bold 14px monospace'; ctx.textAlign = 'center';
-  ctx.fillText('TAP TO PLAY AGAIN', GW / 2, 640);
+  ctx.fillText('TAP TO PLAY AGAIN', GW / 2, 660);
 }
 
 // ── Input ────────────────────────────────────────────────────────
@@ -816,10 +1275,33 @@ canvas.addEventListener('touchstart', e => {
   for (const t of e.changedTouches) {
     const { x, y } = toGameCoords(t.clientX, t.clientY);
 
-    if (S.screen === 'title' || S.screen === 'gameover') {
-      if (S.screen === 'gameover') initState();
-      S.screen = 'playing';
-      return;
+    // Pause button (top-left)
+    if (x < 38 && y < 30 && S.screen === 'playing') {
+      S.paused = !S.paused;
+      continue;
+    }
+    // Resume on tap when paused
+    if (S.paused) { S.paused = false; continue; }
+
+    // Info button always tappable
+    if (Math.hypot(x - 374, y - 14) < 18) {
+      S.showInfo = !S.showInfo;
+      continue;
+    }
+    // Tap anywhere else closes info panel
+    if (S.showInfo) { S.showInfo = false; continue; }
+
+    if (S.screen === 'title') {
+      // Difficulty buttons: drawn at bx=90, bx=162, bx=234 each 64px wide
+      if (y >= 405 && y <= 440) {
+        if (x >= 85  && x < 158) { S._difficulty = 'easy';   continue; }
+        if (x >= 158 && x < 230) { S._difficulty = 'normal'; continue; }
+        if (x >= 230 && x < 305) { S._difficulty = 'hard';   continue; }
+      }
+      S.screen = 'playing'; return;
+    }
+    if (S.screen === 'gameover') {
+      initState(); S.screen = 'playing'; return;
     }
     if (S.screen !== 'playing') return;
 
@@ -840,20 +1322,22 @@ canvas.addEventListener('touchstart', e => {
     }
     if (dPass < 38) {
       if (S.possession === 'a') {
-        const now = Date.now();
-        if (S.passDoubleTapPending && now - S.lastPassTapTime < 400) {
-          S.passDoubleTapPending = false;
-          handlePassAction();
-        } else {
-          S.passDoubleTapPending = true;
-          S.lastPassTapTime = now;
-        }
+        handlePassAction();
       } else {
-        S.stealTaps++;
-        S.lastStealTapTime = Date.now();
-        handleStealMash();
+        handleStealAction();
       }
       continue;
+    }
+
+    // Defense: tap near teammate to switch control
+    if (S.possession === 'b') {
+      const tmId = S.activeHuman === 'nara' ? 'ethan' : 'nara';
+      const tm = S.players[tmId];
+      if (Math.hypot(x - tm.x, y - tm.y) < 55) {
+        S.activeHuman = tmId;
+        S.switchFlash = { name: CHARS[tmId].name, color: CHARS[tmId].hue, ttl: 50 };
+        continue;
+      }
     }
 
     // Left+centre area → joystick
@@ -919,18 +1403,9 @@ window.addEventListener('keydown', e => {
   }
   if (e.code === 'Enter' && !wasDown) {
     if (S.possession === 'a') {
-      const now = Date.now();
-      if (S.passDoubleTapPending && now - S.lastPassTapTime < 400) {
-        S.passDoubleTapPending = false;
-        handlePassAction();
-      } else {
-        S.passDoubleTapPending = true;
-        S.lastPassTapTime = now;
-      }
+      handlePassAction();
     } else {
-      S.stealTaps++;
-      S.lastStealTapTime = Date.now();
-      handleStealMash();
+      handleStealAction();
     }
   }
 });
@@ -967,6 +1442,10 @@ function applyKeyboard() {
 // Mouse support for desktop
 canvas.addEventListener('mousedown', e => {
   const { x, y } = toGameCoords(e.clientX, e.clientY);
+  if (x < 38 && y < 30 && S.screen === 'playing') { S.paused = !S.paused; return; }
+  if (S.paused) { S.paused = false; return; }
+  if (Math.hypot(x - 374, y - 14) < 18) { S.showInfo = !S.showInfo; return; }
+  if (S.showInfo) { S.showInfo = false; return; }
   if (S.screen === 'title' || S.screen === 'gameover') {
     if (S.screen === 'gameover') initState();
     S.screen = 'playing'; return;
@@ -1029,21 +1508,55 @@ function releaseShoot() {
   S.shootPower = 0;
   if (power < 8) { ap.anim = 'idle'; return; } // too light, abort
 
+  // Pump fake: very quick release (<13 frames) — freeze nearby defenders
+  if (power < 13) {
+    ap.anim = 'shoot';
+    spawnThought(ap.id, '👀 PUMP FAKE!');
+    for (const def of TEAM_B_IDS) {
+      const dp = S.players[def];
+      if (Math.hypot(ap.x - dp.x, ap.y - dp.y) < 72 && dp._jumpVy === 0 && dp.jumpY === 0) {
+        dp._jumpVy = -7;
+        dp.anim = 'jump';
+        spawnThought(def, '😅');
+      }
+    }
+    setTimeout(() => { if (S.players[ap.id] && S.players[ap.id].anim === 'shoot') S.players[ap.id].anim = 'idle'; }, 350);
+    return;
+  }
+
   const dist = Math.abs(ap.x - HOOP_X);
   if (dist > SHOT_RANGE_3 + 20) { ap.anim = 'idle'; return; }
 
   const inGreen = power >= POWER_GREEN_LO && power <= POWER_GREEN_HI;
-  let acc;
-  if (inGreen)       acc = 0.88;
-  else if (power < 30) acc = 0.12;
-  else if (power > 90) acc = 0.32; // overpowered
-  else                 acc = 0.38 + (power / 100) * 0.30;
+  const isPerfect = power >= 60 && power <= 68;
+
+  let acc, timingText;
+  if (isPerfect)        { acc = 0.95; timingText = '🎯 PERFECT!'; }
+  else if (inGreen)     { acc = 0.88; timingText = '💚 GOOD!'; }
+  else if (power < POWER_GREEN_LO) { acc = 0.12 + power * 0.006; timingText = '⬆ EARLY'; }
+  else                  { acc = 0.32; timingText = '⬇ LATE'; }
+
+  // Layup / dunk near basket — higher accuracy, override text
+  if (dist < 70) {
+    const isDunk = dist < 38 && power >= 40;
+    if (isDunk) { acc = 0.97; timingText = '💥 DUNK!'; }
+    else        { acc = Math.min(acc + 0.24, 0.96); if (timingText !== '⬆ EARLY') timingText = '🏃 LAYUP!'; }
+  }
+
+  // Hot hand bonus — on fire streak gives +8% accuracy
+  if (S.streak >= 3) acc = Math.min(acc + 0.08, 0.99);
+
+  spawnThought(ap.id, timingText);
+  if (timingText === '💥 DUNK!') sfxDunk(); else sfxShoot();
+  S.shotClock = 600;
+  S.stats.shots++;
 
   const made = Math.random() < acc;
   ap.anim = 'shoot';
   ap.hasBall = false;
   S.ball.carrier = null;
   fireBallShot(ap.x, ap.y + ap.jumpY - 55, made, dist);
+  if (isPerfect) S.ball._perfect = true;
   S.ball._fromX = ap.x;
   setTimeout(() => {
     if (S.players[ap.id] && S.players[ap.id].anim === 'shoot')
@@ -1077,56 +1590,107 @@ function handlePassAction() {
   const tp = S.players[teammate];
 
   ap.hasBall = false;
-  ap.anim = 'idle';
   S.ball.carrier = null;
   S.ball.inAir = true;
   S.ball.x = ap.x; S.ball.y = ap.y - 50;
+
+  // Pass with slight arc
   const dx = tp.x - ap.x, dy = (tp.y - 55) - (ap.y - 50);
-  S.ball.vx = dx / 16; S.ball.vy = dy / 16 - 3;
+  const passDist = Math.hypot(dx, dy);
+  const tPass = Math.max(10, passDist / 14);
+  // Detect alley-oop: teammate near basket, no defender right on them
+  const nearBasket = tp.x > HOOP_X - 75;
+  const defClose = TEAM_B_IDS.some(id => Math.hypot(S.players[id].x - tp.x, S.players[id].y - tp.y) < 55);
+  const isAlleyOop = nearBasket && !defClose;
+
+  S.ball.vx = dx / tPass;
+  // Higher lob for alley-oop
+  S.ball.vy = (dy - 0.225 * tPass * tPass) / tPass - (isAlleyOop ? 4 : 1);
   S.ball._pass = true;
   S.ball._passTarget = teammate;
+  if (isAlleyOop) S.ball._alleyOop = true;
+
+  // Passer cuts to open position (toward the hoop, offset from receiver)
+  const cutX = tp.x > 180 ? HOOP_X - 140 : HOOP_X - 60;
+  const cutY = (COURT_FAR_Y + COURT_NEAR_Y) / 2 + (Math.random() - 0.5) * 30;
+  ap._cutting = true;
+  ap._cutTarget = { x: cutX, y: cutY };
+  ap.anim = 'run';
 
   S.activeHuman = teammate;
-  spawnThought(teammate, '🏀');
+  spawnThought(teammate, isAlleyOop ? '🙌' : '🏀');
+  S.switchFlash = { name: CHARS[teammate].name, color: CHARS[teammate].hue, ttl: 70 };
 }
 
-function handleStealMash() {
+function handleStealAction() {
   const ap = S.players[S.activeHuman];
+  // Cooldown to prevent spamming
+  if (ap._stealCooldown > 0) return;
+
   const carriers = TEAM_B_IDS.filter(id => S.players[id].hasBall);
   if (!carriers.length) return;
   const carrier = S.players[carriers[0]];
   const dist = Math.hypot(ap.x - carrier.x, ap.y - carrier.y);
-  if (dist > 70) {
-    if (S.stealTaps === 1) spawnThought(S.activeHuman, 'TOO FAR');
-    return;
-  }
-  // Each consecutive tap within window boosts odds
-  const tapBonus  = Math.min(S.stealTaps, 7) * 0.08;
-  const success   = Math.random() < 0.15 + tapBonus;
+  
+  ap.anim = 'jump';
+  ap._stealCooldown = 45; // ~0.75s
+  ap._stealRing = 12; // visual ring frames
 
-  if (success) {
-    carrier.hasBall = false; carrier.anim = 'sad';
-    S.ball.carrier = S.activeHuman;
-    S.players[S.activeHuman].hasBall = true;
-    S.players[S.activeHuman].anim = 'celebrate';
-    S.possession = 'a';
-    S.stealTaps = 0;
-    spawnThought(S.activeHuman, CHARS[S.activeHuman].quips[2]);
-  } else if (S.stealTaps <= 2) {
-    spawnThought(S.activeHuman, '🤚');
+  if (dist < 60) {
+    // Catch-up boost: easier to steal when losing
+    const catchup = (S.score[1] - S.score[0]) >= 3 ? 1.18 : 1.0;
+    const success = Math.random() < 0.45 * catchup;
+    if (success) {
+      carrier.hasBall = false; carrier.anim = 'sad';
+      S.ball.carrier = S.activeHuman;
+      S.players[S.activeHuman].hasBall = true;
+      S.players[S.activeHuman].anim = 'celebrate';
+      S.possession = 'a';
+      spawnThought(S.activeHuman, CHARS[S.activeHuman].quips[2]);
+      sfxSteal();
+      S.stats.steals++;
+      S._fastBreak = 150;
+    } else {
+      spawnThought(S.activeHuman, '❌ MISS');
+      sfxMiss();
+    }
+  } else {
+    spawnThought(S.activeHuman, 'TOO FAR');
   }
 }
 
 function tryBlock() {
   const shooter = TEAM_B_IDS.find(id => S.players[id].anim === 'shoot');
   if (!shooter) return;
-  const ap   = S.players[S.activeHuman];
-  const bp   = S.players[shooter];
-  const dist = Math.hypot(ap.x - bp.x, ap.y - bp.y);
+  const bp = S.players[shooter];
+  // Either active player OR teammate can block if close enough
+  const blocker = TEAM_A_IDS
+    .map(id => ({ id, dist: Math.hypot(S.players[id].x - bp.x, S.players[id].y - bp.y) }))
+    .sort((a, b) => a.dist - b.dist)[0];
+  const ap = S.players[blocker.id];
+  const dist = blocker.dist;
   if (dist < 90) {
-    if (S.ball.inAir) { S.ball.vx *= -0.5; S.ball.vy = -8; }
-    spawnThought(S.activeHuman, '🛡 BLOCK!');
+    if (S.ball.inAir) {
+      S.ball.vx = (Math.random() - 0.5) * 8;
+      S.ball.vy = -10;
+      S.ball._made = false;
+    }
+    spawnThought(blocker.id, '🛡 BLOCK!');
+    sfxSteal();
+    S.stats.blocks++;
+    S.shake = 8;
     bp.anim = 'sad';
+    // Confetti burst for the block
+    for (let i = 0; i < 15; i++) {
+      S.confetti.push({
+        x: ap.x + (Math.random() - 0.5) * 20,
+        y: ap.y - 80,
+        vx: (Math.random() - 0.5) * 8, vy: -Math.random() * 6 - 2,
+        color: CHARS[ap.id].hue, size: 5 + Math.random() * 4,
+        ttl: 35 + Math.floor(Math.random() * 20),
+        rot: Math.random() * Math.PI * 2, dRot: (Math.random() - 0.5) * 0.4,
+      });
+    }
   }
 }
 
@@ -1135,14 +1699,21 @@ function updateBall() {
   const b = S.ball;
   if (b.carrier) {
     const cp = S.players[b.carrier];
+    const dribble = cp.anim === 'run' ? Math.abs(Math.sin(S.frame * 0.28)) * 18 : 8;
     b.x = cp.x + cp.facing * 18;
-    b.y = cp.y + cp.jumpY - 48;
+    b.y = cp.y + cp.jumpY - 48 + dribble;
     return;
   }
   if (!b.inAir) return;
 
-  b.vy += 0.45;
-  b.x += b.vx; b.y += b.vy;
+  // Slight slow-mo near rim on perfect shots for drama
+  const nearRim = Math.hypot(b.x - HOOP_X, b.y - RIM_Y) < 60;
+  const slowFactor = (b._perfect && nearRim) ? 0.65 : 1;
+  b.vy += 0.45 * slowFactor;
+  b.x += b.vx * slowFactor; b.y += b.vy * slowFactor;
+  b.rot = (b.rot || 0) + b.vx * 0.07;
+  S.ballTrail.push({ x: b.x, y: b.y });
+  if (S.ballTrail.length > 8) S.ballTrail.shift();
   if (b._t !== undefined) b._t++;
 
   const distToRim = Math.hypot(b.x - HOOP_X, b.y - RIM_Y);
@@ -1154,29 +1725,81 @@ function updateBall() {
       b.vx = (Math.random() - 0.5) * 6;
       b.vy = -5;
       b._made = false;
+      sfxRimHit();
+      // Rim spark particles
+      for (let i = 0; i < 5; i++) {
+        S.confetti.push({ x: HOOP_X, y: RIM_Y, vx: (Math.random()-0.5)*5, vy: -Math.random()*4-1, color: '#FF8800', size: 2.5, ttl: 18, rot: 0, dRot: 0.2 });
+      }
     }
   }
 
   // Pass target catch
   if (b._pass) {
     const target = S.players[b._passTarget];
-    if (target && Math.hypot(b.x - target.x, b.y - (target.y - 50)) < 40) {
+    if (target && Math.hypot(b.x - target.x, b.y - (target.y - 50)) < 55) {
+      // Alley-oop catch — auto-dunk!
+      if (b._alleyOop && target.x > HOOP_X - 75) {
+        const aloopId = b._passTarget;
+        const dist = Math.abs(target.x - HOOP_X);
+        b._pass = false; b._alleyOop = false; b._passTarget = null; b.carrier = null;
+        target.anim = 'shoot'; target._jumpVy = -10;
+        fireBallShot(target.x, target.y - 70, true, dist);
+        S.ball._fromX = target.x;
+        S.stats.shots++;
+        S.scoreFlash = { text: '🙌 ALLEY-OOP!', color: CHARS[aloopId].hue, ttl: 90 };
+        spawnThought(aloopId, '💥 DUNK!');
+        sfxAlleyOop();
+        if (navigator.vibrate) navigator.vibrate([30, 20, 60]);
+        return;
+      }
       b.carrier = b._passTarget;
       target.hasBall = true;
       target.anim = 'idle';
       b.inAir = false; b._pass = false; b._passTarget = null;
       return;
     }
+    // Defenders can intercept passes that fly close to them
+    const defTeam = S.possession === 'a' ? TEAM_B_IDS : TEAM_A_IDS;
+    for (const def of defTeam) {
+      if (def === b._passTarget) continue;
+      const dp = S.players[def];
+      if (Math.hypot(b.x - dp.x, b.y - (dp.y - 35)) < 42) {
+        const pickRate = S._difficulty === 'easy' ? 0.007 : S._difficulty === 'hard' ? 0.022 : 0.013;
+        if (Math.random() < pickRate) {
+          b.inAir = false; b._pass = false; b._passTarget = null;
+          b.carrier = def; dp.hasBall = true;
+          S.possession = S.possession === 'a' ? 'b' : 'a';
+          spawnThought(def, '😤 PICK!');
+          sfxSteal();
+          return;
+        }
+      }
+    }
   }
 
   if (b.y >= FLOOR_Y - 10) {
     b.y = FLOOR_Y - 10;
-    if (b._made === false || !b._made) turnoverToCPU();
     b.vy = -b.vy * 0.45;
     b.vx *= 0.7;
     if (Math.abs(b.vy) < 1.5) {
       b.inAir = false; b.vy = 0; b.vx = 0;
-      if (!b.carrier) turnoverToCPU();
+      if (!b.carrier) {
+        // Contested rebound: closest player to ball gets it
+        const all = TEAM_A_IDS.concat(TEAM_B_IDS)
+          .map(id => ({ id, dist: Math.hypot(S.players[id].x - b.x, S.players[id].y - b.y) }))
+          .sort((a, c) => a.dist - c.dist);
+        const closest = all[0];
+        if (TEAM_A_IDS.includes(closest.id) && closest.dist < 120) {
+          S.possession = 'a';
+          S.ball.carrier = closest.id;
+          S.players[closest.id].hasBall = true;
+          S.activeHuman = closest.id;
+          S._fastBreak = 100;
+          spawnThought(closest.id, '🏀 REBOUND!');
+        } else {
+          turnoverToCPU();
+        }
+      }
     }
   }
 
@@ -1189,38 +1812,121 @@ function scorePoint() {
   const pts  = dist > SHOT_RANGE_2 ? 3 : 2;
   const team = S.possession;
 
+  const prevDeficit = S.score[1] - S.score[0]; // how far human was behind before this
   S.score[team === 'a' ? 0 : 1] += pts;
 
   const scorer = team === 'a' ? S.activeHuman : TEAM_B_IDS.find(id => S.players[id].hasBall) || 'brendan';
   spawnThought(scorer, CHARS[scorer].quips[Math.floor(Math.random() * 4)]);
 
+  // Buzzer beater bonus
+  const isBuzzer = S.possession === 'a' && S.shotClock <= 55;
+  const flashText = isBuzzer ? '🚨 BUZZER BEATER!' : pts === 3 ? '3️⃣ THREE!' : pts + ' PTS!';
   S.scoreFlash = {
-    text: pts + ' PTS!' + (pts === 3 ? ' 🔥' : ''),
+    text: flashText,
     color: team === 'a' ? CHARS.nara.hue : CHARS.brendan.hue,
-    ttl: 70
+    ttl: isBuzzer ? 100 : 70
   };
+
+  sfxScore(pts);
+  S.shake = isBuzzer ? 20 : 12;
+  S.hoopFlash = 25;
+  if (navigator.vibrate) navigator.vibrate(isBuzzer ? [80, 40, 80] : pts === 3 ? [30, 20, 50] : 45);
+  if (team === 'a') S.stats.made++;
+  if (team === 'a' && pts === 3) S.stats.threes++;
+  if (team === 'a' && S.scoreFlash && S.scoreFlash.text.includes('ALLEY')) S.stats.alleyOops++;
+
+  // AND ONE: defender very close at shot origin → chance for bonus point
+  if (team === 'a') {
+    const shotX = b._fromX || S.players[S.activeHuman]?.x || 100;
+    const defNear = TEAM_B_IDS.some(id => Math.hypot(S.players[id].x - shotX, 0) < 40);
+    if (defNear && pts === 2 && Math.random() < 0.22) {
+      setTimeout(() => {
+        if (S.screen === 'playing') {
+          S.score[0] += 1;
+          const andScorer = S.activeHuman;
+          spawnThought(andScorer, '🤙 AND ONE!');
+          S.scoreFlash = { text: '🤙 AND ONE! +1', color: '#FFD700', ttl: 80 };
+          if (navigator.vibrate) navigator.vibrate(25);
+        }
+      }, 1100);
+    }
+  }
+  if (team === 'a') {
+    const bonus = isBuzzer ? 2 : 1;
+    S.streak = (S.streak || 0) + bonus;
+    if (S.streak >= 5) {
+      setTimeout(() => { S.scoreFlash = { text: '🔥🔥 CROWD GOES WILD!', color: '#FF4500', ttl: 100 }; }, 900);
+    } else if (S.streak >= 2) {
+      spawnThought(scorer, isBuzzer ? '🚨🔥 CLUTCH!' : `🔥 x${S.streak}!`);
+    }
+    // Comeback message when scoring while trailing
+    if (prevDeficit >= 3) {
+      setTimeout(() => { S.scoreFlash = { text: '💪 COMEBACK!', color: CHARS.nara.hue, ttl: 80 }; }, 800);
+    }
+  } else {
+    S.streak = 0;
+    const taunts = ['😤 TOO EASY!', '🥁 BOOM!', '💪 SIT DOWN!', '😎 NIGHT NIGHT!'];
+    setTimeout(() => spawnThought(scorer, taunts[Math.floor(Math.random() * taunts.length)]), 600);
+  }
 
   const teamIds = team === 'a' ? TEAM_A_IDS : TEAM_B_IDS;
   const loseIds = team === 'a' ? TEAM_B_IDS : TEAM_A_IDS;
   for (const id of teamIds) S.players[id].anim = 'celebrate';
   for (const id of loseIds) S.players[id].anim = 'sad';
 
+  // Spawn confetti burst
+  const colors = team === 'a' ? [CHARS.nara.hue, CHARS.ethan.hue, '#FFD700', '#FFF'] : [CHARS.brendan.hue, CHARS.james.hue, '#FFD700', '#FFF'];
+  for (let i = 0; i < 40; i++) {
+    S.confetti.push({
+      x: HOOP_X + (Math.random() - 0.5) * 30,
+      y: RIM_Y,
+      vx: (Math.random() - 0.5) * 7,
+      vy: -Math.random() * 10 - 3,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      size: 4 + Math.random() * 5,
+      ttl: 60 + Math.floor(Math.random() * 40),
+      rot: Math.random() * Math.PI * 2,
+      dRot: (Math.random() - 0.5) * 0.3,
+    });
+  }
+
+  // Tie game drama
+  if (S.score[0] === S.score[1] && S.score[0] > 0) {
+    setTimeout(() => { S.scoreFlash = { text: '⚖️ TIE GAME!', color: '#FFFFFF', ttl: 80 }; }, 1200);
+  }
+  // Game point
+  else if (S.score[0] === WIN_SCORE - 1 && team === 'a') {
+    setTimeout(() => { S.scoreFlash = { text: '🏀 GAME POINT!', color: CHARS.nara.hue, ttl: 90 }; }, 1200);
+  } else if (S.score[1] === WIN_SCORE - 1 && team === 'b') {
+    setTimeout(() => { S.scoreFlash = { text: '⚠️ GAME POINT!', color: CHARS.brendan.hue, ttl: 90 }; }, 1200);
+  }
+
   resetBallAfterScore(team === 'a' ? 'b' : 'a');
 
   if (S.score[0] >= WIN_SCORE || S.score[1] >= WIN_SCORE) {
-    setTimeout(() => { S.screen = 'gameover'; }, 1500);
+    setTimeout(() => {
+      S.screen = 'gameover';
+      // Save best stats to localStorage
+      try {
+        const best = JSON.parse(localStorage.getItem('hch_best') || '{}');
+        if (!best.streak || S.streak > best.streak) best.streak = S.streak;
+        const pct = S.stats.shots > 0 ? Math.round(S.stats.made / S.stats.shots * 100) : 0;
+        if (!best.fgPct || pct > best.fgPct) best.fgPct = pct;
+        if (S.score[0] >= WIN_SCORE) best.wins = (best.wins || 0) + 1;
+        localStorage.setItem('hch_best', JSON.stringify(best));
+      } catch(e) {}
+    }, 1500);
   }
 }
 
 function resetBallAfterScore(nextPossession) {
   S.possession = nextPossession;
   const carrier = nextPossession === 'a' ? 'nara' : 'brendan';
+  S.shotClock = 600;
 
   // Reset hold state
   S.shootHeld = false; S.shootPower = 0;
   S.blockHeld = false; S.blockPower = 0;
-  S.passDoubleTapPending = false;
-  S.stealTaps = 0;
 
   for (const id of TEAM_A_IDS.concat(TEAM_B_IDS)) {
     if (S.players[id].anim === 'celebrate' || S.players[id].anim === 'sad') {
@@ -1228,10 +1934,20 @@ function resetBallAfterScore(nextPossession) {
     }
   }
 
+  S._fastBreak = 0;
+  S.ball._alleyOop = false;
+  S.ball._fromX = undefined;
+
   for (const id of TEAM_A_IDS.concat(TEAM_B_IDS)) {
     S.players[id].jumpY = 0; S.players[id]._jumpVy = 0;
     S.players[id].hasBall = false;
     S.players[id].y = COURT_FAR_Y + 20;
+    S.players[id]._cutting = false;
+    S.players[id]._willShoot = false;
+    S.players[id]._willThree = false;
+    S.players[id]._goingThree = false;
+    S.players[id]._driving = false;
+    S.players[id]._faked = false;
   }
 
   if (nextPossession === 'a') {
@@ -1255,6 +1971,7 @@ function resetBallAfterScore(nextPossession) {
 function turnoverToCPU() {
   if (S.possession === 'b') return;
   S.possession = 'b';
+  S._fastBreak = 0;
   S.ball.inAir = false;
   S.ball.vx = 0; S.ball.vy = 0;
   S.ball.carrier = 'brendan';
@@ -1263,18 +1980,14 @@ function turnoverToCPU() {
   S.players.ethan.hasBall = false;
   S.ball._made = undefined;
   S.shootHeld = false; S.shootPower = 0;
-  S.passDoubleTapPending = false;
 }
 
 // ── Player Movement Update ────────────────────────────────────────
 function updatePlayers() {
-  // Expire double-tap and steal-mash windows
-  const now = Date.now();
-  if (S.passDoubleTapPending && now - S.lastPassTapTime > 500) {
-    S.passDoubleTapPending = false;
-  }
-  if (S.stealTaps > 0 && now - S.lastStealTapTime > 700) {
-    S.stealTaps = 0;
+  // Update cooldowns
+  for (const id of TEAM_A_IDS.concat(TEAM_B_IDS)) {
+    const p = S.players[id];
+    if (p._stealCooldown > 0) p._stealCooldown--;
   }
 
   // Jump physics for all players
@@ -1287,11 +2000,12 @@ function updatePlayers() {
         p.jumpY = 0; p._jumpVy = 0;
         if (p.anim === 'jump') {
           p.anim = 'land';
+          p.landStartFrame = S.frame;
           const pid = id;
           setTimeout(() => {
             if (S.players[pid] && S.players[pid].anim === 'land')
               S.players[pid].anim = 'idle';
-          }, 200);
+          }, 280);
         }
       }
     }
@@ -1300,40 +2014,81 @@ function updatePlayers() {
   if (S.possession === 'a') {
     updateAIDefense();
     const ap  = S.players[S.activeHuman];
-    const spd = 3.5;
+    if (S._fastBreak > 0) S._fastBreak--;
+    const spd = S._fastBreak > 0 ? 4.4 : 3.5;
 
     if (S.joy.active) {
       const jNorm = Math.hypot(S.joy.dx, S.joy.dy);
       if (jNorm > 8) {
-        ap.vx = (S.joy.dx / 55) * spd;
-        ap.vy = (S.joy.dy / 55) * spd * 0.6; // y-axis (depth)
-        if (Math.abs(S.joy.dx) > 6) ap.facing = S.joy.dx > 0 ? 1 : -1;
-        ap.anim = 'run';
+        const targetVx = (S.joy.dx / 55) * spd;
+        const targetVy = (S.joy.dy / 55) * spd * 0.6;
+        ap.vx += (targetVx - ap.vx) * 0.28; // inertia ramp-up
+        ap.vy += (targetVy - ap.vy) * 0.28;
+        if (Math.abs(ap.vx) > 0.4 || Math.abs(ap.vy) > 0.4) {
+          if (Math.abs(S.joy.dx) > 6) ap.facing = S.joy.dx > 0 ? 1 : -1;
+          ap.anim = 'run';
+        }
       } else {
-        ap.vx = 0; ap.vy = 0;
-        ap.anim = 'idle';
+        ap.vx *= 0.72; ap.vy *= 0.72; // deceleration slide
+        if (Math.hypot(ap.vx, ap.vy) < 0.3) { ap.vx = 0; ap.vy = 0; ap.anim = 'idle'; }
       }
     } else {
-      ap.vx = 0; ap.vy = 0;
-      ap.anim = 'idle';
+      ap.vx *= 0.72; ap.vy *= 0.72;
+      if (Math.hypot(ap.vx, ap.vy) < 0.3) { ap.vx = 0; ap.vy = 0; ap.anim = 'idle'; }
     }
 
     ap.x = Math.max(20, Math.min(300, ap.x + ap.vx));
     ap.y = Math.max(COURT_FAR_Y, Math.min(COURT_NEAR_Y, ap.y + ap.vy));
 
-    // Teammate auto-positions for support
+    // Teammate movement: post-pass cut or spacing
     const teammate = S.activeHuman === 'nara' ? 'ethan' : 'nara';
     const tp = S.players[teammate];
-    const targetX = ap.hasBall ? ap.x + 65 : ap.x - 55;
-    const tdx = targetX - tp.x;
-    if (Math.abs(tdx) > 8) {
-      tp.x += Math.sign(tdx) * 2;
+
+    // Cancel cut once player gets the ball back
+    if (tp._cutting && tp.hasBall) tp._cutting = false;
+
+    let targetX, targetY;
+    if (tp._cutting && tp._cutTarget) {
+      // Run hard to the cut target
+      targetX = tp._cutTarget.x;
+      targetY = tp._cutTarget.y;
+      const tdx = targetX - tp.x, tdy = targetY - tp.y;
+      if (Math.hypot(tdx, tdy) < 12) tp._cutting = false;
+      tp.x += Math.sign(tdx) * 3.2;
+      tp.y += Math.sign(tdy) * 2.0;
       tp.anim = 'run';
       tp.facing = tdx > 0 ? 1 : -1;
     } else {
-      tp.anim = 'idle';
+      // Weak-side positioning: teammate stays on opposite side from ball handler
+      const apZone = ap.x < 185 ? 'left' : 'right';
+      if (S._fastBreak > 0) {
+        // Fast break — sprint straight to basket
+        targetX = HOOP_X - 38;
+        targetY = COURT_FAR_Y + 12;
+      } else if (apZone === 'left') {
+        // Ball handler on left → teammate takes right wing near basket
+        targetX = HOOP_X - 52;
+        targetY = COURT_FAR_Y + 16;
+      } else {
+        // Ball handler on right → teammate takes left elbow/wing
+        targetX = 110;
+        targetY = COURT_FAR_Y + 10;
+      }
+      // If still too close to active player, push further away
+      if (Math.abs(targetX - ap.x) < 60) targetX = apZone === 'left' ? 80 : HOOP_X - 42;
+      const tdx = targetX - tp.x, tdy = targetY - tp.y;
+      if (Math.abs(tdx) > 8 || Math.abs(tdy) > 8) {
+        tp.x += Math.sign(tdx) * 2.5;
+        tp.y += Math.sign(tdy) * 1.5;
+        tp.anim = 'run';
+        tp.facing = tdx > 0 ? 1 : -1;
+      } else {
+        tp.anim = 'idle';
+        tp.facing = 1; // always look toward hoop
+      }
     }
-    tp.x = Math.max(20, Math.min(300, tp.x));
+    tp.x = Math.max(20, Math.min(320, tp.x));
+    tp.y = Math.max(COURT_FAR_Y, Math.min(COURT_NEAR_Y, tp.y));
 
   } else {
     // CPU offense
@@ -1380,18 +2135,21 @@ function updateAIDefense() {
   brendan.aiTimer++;
   james.aiTimer++;
 
-  // Brendan pressures the ball carrier (pick + steal threat)
-  const targetBX = Math.min(carrier.x - 35, HOOP_X - 45);
+  // Brendan pressures the carrier — stays close, between carrier and basket
+  const backoffB = 28;
+  const targetBX = Math.max(carrier.x + backoffB, HOOP_X - 35);
   const bDx = targetBX - brendan.x;
-  const bDy = carrier.y - brendan.y;
+  const bDy = (carrier.y - 8) - brendan.y;
+  const bSpeed = carrier.vx !== 0 ? 3.0 : 2.2;
   if (Math.abs(bDx) > 8) {
-    brendan.x += Math.sign(bDx) * 2.0;
+    brendan.x += Math.sign(bDx) * bSpeed;
     brendan.anim = 'run';
-    brendan.facing = bDx > 0 ? 1 : -1;
+    brendan.facing = bDx < 0 ? 1 : -1; // face the carrier (toward left = toward hoop side)
   } else {
     brendan.anim = 'idle';
+    brendan.facing = -1; // always face the carrier
   }
-  if (Math.abs(bDy) > 8) brendan.y += Math.sign(bDy) * 1.2;
+  if (Math.abs(bDy) > 8) brendan.y += Math.sign(bDy) * 1.9;
   brendan.x = Math.max(20, Math.min(340, brendan.x));
   brendan.y = Math.max(COURT_FAR_Y, Math.min(COURT_NEAR_Y, brendan.y));
 
@@ -1401,16 +2159,22 @@ function updateAIDefense() {
     carrier.x -= carrier.vx * 0.55;
   }
 
-  // James guards the paint
-  const targetJX = HOOP_X - 65;
+  // James plays back — protects the paint and slides toward carrier when they drive inside
+  const driveDepth = carrier.x > HOOP_X - 130; // carrier has driven into the lane
+  const targetJX = driveDepth ? Math.min(carrier.x + 30, HOOP_X - 25) : HOOP_X - 60;
+  const targetJY = driveDepth ? carrier.y : (COURT_FAR_Y + COURT_NEAR_Y) / 2;
   const jDx = targetJX - james.x;
+  const jDy = targetJY - james.y;
   if (Math.abs(jDx) > 8) {
-    james.x += Math.sign(jDx) * 1.6;
+    james.x += Math.sign(jDx) * 1.8;
     james.anim = 'run';
-    james.facing = jDx > 0 ? 1 : -1;
+    james.facing = jDx < 0 ? 1 : -1;
   } else {
     james.anim = 'idle';
+    james.facing = -1;
   }
+  if (Math.abs(jDy) > 8) james.y += Math.sign(jDy) * 1.2;
+  james.y = Math.max(COURT_FAR_Y, Math.min(COURT_NEAR_Y, james.y));
 
   // AI jump-block when human is charging shot
   if (S.shootHeld && S.shootPower > 25) {
@@ -1426,14 +2190,14 @@ function updateAIDefense() {
   // AI steal attempt when Brendan is close
   if (distToBrendan < 55 && brendan.aiTimer > 60) {
     brendan.aiTimer = 0;
-    const success = Math.random() < 0.20;
+    const stealRate = S._difficulty === 'easy' ? 0.10 : S._difficulty === 'hard' ? 0.32 : 0.20;
+    const success = Math.random() < stealRate;
     if (success && carrier.hasBall) {
       carrier.hasBall = false;
       S.ball.carrier = 'brendan';
       brendan.hasBall = true;
       S.possession = 'b';
       S.shootHeld = false; S.shootPower = 0;
-      S.passDoubleTapPending = false;
       spawnThought('brendan', '😤 STEAL!');
     }
   }
@@ -1448,19 +2212,35 @@ function updateAI() {
 
   if (brendan.hasBall) {
     brendan.facing = brendan.x < HOOP_X ? 1 : -1;
-    // Drive and then pass to James
-    const targetX = HOOP_X - 80;
+    const diff = S._difficulty || 'normal';
+    const driveProb = diff === 'hard' ? 0.006 : diff === 'easy' ? 0.001 : 0.003;
+    const threeProb = diff === 'hard' ? 0.004 : 0;
+    const shootChance = Math.random() < driveProb;
+    if (shootChance && brendan.aiTimer > 20) { brendan._willShoot = true; brendan._willThree = false; }
+    if (!brendan._willShoot && Math.random() < threeProb && brendan.aiTimer > 20) {
+      brendan._willShoot = true; brendan._willThree = true;
+    }
+    const targetX = brendan._willThree ? HOOP_X - 215 : brendan._willShoot ? HOOP_X - 30 : HOOP_X - 80;
+    const brendanSpeed = diff === 'hard' ? 2.8 : diff === 'easy' ? 1.6 : 2.2;
     const dx = targetX - brendan.x;
     if (Math.abs(dx) > 10) {
-      brendan.x += Math.sign(dx) * 2.2;
+      brendan.x += Math.sign(dx) * brendanSpeed;
       brendan.anim = 'run';
     } else {
       brendan.anim = 'idle';
     }
     brendan.x = Math.max(20, Math.min(295, brendan.x));
+    // Brendan drifts forward when attacking for harder defense angles
+    const bOffY = brendan._willShoot ? COURT_FAR_Y + 4 : COURT_FAR_Y + 18;
+    if (Math.abs(brendan.y - bOffY) > 6) brendan.y += Math.sign(bOffY - brendan.y) * 1.2;
 
-    // Pass to James after a short drive
-    if (brendan.aiTimer > 45 + Math.random() * 30) {
+    if (brendan._willShoot && Math.abs(brendan.x - targetX) < 15 && brendan.aiTimer > 30) {
+      brendan._willShoot = false;
+      brendan._willThree = false;
+      brendan.aiTimer = 0;
+      aiShoot(brendan);
+    } else if (!brendan._willShoot && brendan.aiTimer > 45 + Math.random() * 30) {
+      // Pass to James
       brendan.aiTimer = 0;
       brendan.hasBall = false;
       S.ball.carrier = null;
@@ -1468,7 +2248,9 @@ function updateAI() {
       S.ball.x = brendan.x; S.ball.y = brendan.y - 50;
       const pdx = james.x - brendan.x;
       const pdy = (james.y - 55) - (brendan.y - 50);
-      S.ball.vx = pdx / 16; S.ball.vy = pdy / 16 - 3;
+      const tPass2 = Math.max(10, Math.hypot(pdx, pdy) / 14);
+      S.ball.vx = pdx / tPass2;
+      S.ball.vy = (pdy - 0.225 * tPass2 * tPass2) / tPass2 - 1;
       S.ball._pass = true;
       S.ball._passTarget = 'james';
       spawnThought('james', '🏀');
@@ -1476,17 +2258,34 @@ function updateAI() {
 
   } else if (james.hasBall) {
     james.facing = james.x < HOOP_X ? 1 : -1;
-    const targetX = HOOP_X - 55;
-    const dx = targetX - james.x;
-    if (Math.abs(dx) > 10) {
-      james.x += Math.sign(dx) * 2.0;
+    const diff = S._difficulty || 'normal';
+    // James sometimes steps back for a 3
+    if (!james._driving && !james._goingThree && james.aiTimer > 20) {
+      const threeChance = diff === 'hard' ? 0.007 : diff === 'easy' ? 0.001 : 0.003;
+      if (Math.random() < threeChance) james._goingThree = true;
+      else if (Math.random() < 0.004) james._driving = true;
+    }
+    const targetX = james._goingThree ? HOOP_X - 215 : james._driving ? HOOP_X - 25 : HOOP_X - 55;
+    const ddx = targetX - james.x;
+    if (Math.abs(ddx) > 10) {
+      james.x += Math.sign(ddx) * (james._driving ? 2.8 : 2.0);
       james.anim = 'run';
     } else {
       james.anim = 'idle';
-      // James shoots after positioning
+      james._driving = false;
+      // James shoots after positioning — sometimes pump fakes first
       if (james.aiTimer > 55 + Math.random() * 40) {
-        james.aiTimer = 0;
-        aiShoot(james);
+        if (!james._faked && !james._goingThree && Math.random() < 0.35) {
+          james._faked = true;
+          james.anim = 'shoot';
+          james.aiTimer = 30;
+          spawnThought('james', '😏');
+        } else {
+          james._faked = false;
+          james._goingThree = false;
+          james.aiTimer = 0;
+          aiShoot(james);
+        }
       }
     }
     james.x = Math.max(20, Math.min(295, james.x));
@@ -1508,8 +2307,11 @@ function updateAI() {
 
 function aiShoot(p) {
   const dist = Math.abs(p.x - HOOP_X);
-  const acc  = dist < SHOT_RANGE_LAY ? 0.75 : dist < SHOT_RANGE_2 ? 0.55 : 0.35;
-  const made = Math.random() < acc;
+  const diffMult = S._difficulty === 'easy' ? 0.55 : S._difficulty === 'hard' ? 1.35 : 1.0;
+  // Mercy mode: ease off when CPU leads by 5+
+  const mercyMult = (S.score[1] - S.score[0]) >= 5 ? 0.72 : 1.0;
+  const acc  = (dist < SHOT_RANGE_LAY ? 0.75 : dist < SHOT_RANGE_2 ? 0.55 : 0.35) * diffMult * mercyMult;
+  const made = Math.random() < Math.min(0.96, acc);
 
   p.anim = 'shoot';
   p.hasBall = false;
@@ -1533,6 +2335,7 @@ function aiShoot(p) {
         S.ball.inAir = false;
         S.ball.x = S.players.nara.x;
         S.ball.y = FLOOR_Y - 30;
+        S._fastBreak = 120;
         spawnThought('nara', '🏀 REBOUND!');
       }
     }, 1800);
@@ -1551,7 +2354,7 @@ function fireBallShot(fromX, fromY, made, dist) {
 
   b.x   = fromX; b.y = fromY;
   b.vx  = (dx + drift) / tFly;
-  b.vy  = (dy - 140) / tFly;
+  b.vy  = (dy - 0.225 * tFly * tFly) / tFly;
   b._tFly  = tFly;
   b._t     = 0;
   b._made  = made;
@@ -1603,6 +2406,19 @@ function loop() {
     return;
   }
 
+  // ── Pause overlay ───────────────────────────────────────────────
+  if (S.paused) {
+    ctx.fillStyle = 'rgba(15,5,40,0.85)';
+    ctx.fillRect(0, 0, GW, GH);
+    ctx.fillStyle = '#FFF'; ctx.font = 'bold 28px monospace';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('PAUSED', GW / 2, GH / 2);
+    ctx.font = '13px monospace'; ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.fillText('tap to resume', GW / 2, GH / 2 + 36);
+    drawHUD();
+    return;
+  }
+
   // ── Update ──────────────────────────────────────────────────────
   applyKeyboard();
   updatePlayers();
@@ -1610,8 +2426,35 @@ function loop() {
   updateShootPower();
   updateThoughts();
   updateScoreFlash();
+  if (S.onboardingTimer > 0) S.onboardingTimer--;
+  if (S.shake > 0) S.shake--;
+
+  // Heat check callout when on fire and charging shot
+  if (S.shootHeld && S.streak >= 3 && S.frame % 120 === 0) {
+    spawnThought(S.activeHuman, '🔥 HEAT CHECK!');
+  }
+
+  // Shot clock
+  if (S.possession === 'a' && !S.ball.inAir && S.pauseTimer <= 0) {
+    S.shotClock = Math.max(0, S.shotClock - 1);
+    if (S.shotClock === 0) {
+      sfxClock(); sfxClock();
+      spawnThought(S.activeHuman, '⏰ SHOT CLOCK!');
+      setTimeout(() => { if (S.possession === 'a') turnoverToCPU(); }, 600);
+      S.shotClock = 600;
+    } else if (S.shotClock % 60 === 0 && S.shotClock <= 180) {
+      sfxClock();
+    }
+  } else if (S.possession !== 'a') {
+    S.shotClock = 600; // reset when CPU has ball
+  }
 
   // ── Draw ────────────────────────────────────────────────────────
+  ctx.save();
+  if (S.shake > 0) {
+    const s = S.shake * 0.4;
+    ctx.translate((Math.random() - 0.5) * s, (Math.random() - 0.5) * s);
+  }
   if (courtBg.complete && courtBg.naturalWidth > 0) {
     ctx.drawImage(courtBg, 0, 0, GW, FLOOR_Y + 30);
   } else {
@@ -1628,22 +2471,103 @@ function loop() {
     drawChar(id, S.players[id].hasBall);
   }
 
+  drawShotTrajectory();
+  drawBallTrail();
   drawBall();
+  updateAndDrawConfetti();
   drawPowerIndicator();
   drawThoughts();
-  drawHUD();
-  drawControls();
+  drawSwitchFlash();
+  ctx.restore(); // end shake transform
 
-  // Possession indicator
+  // 3pt range glow under player when in 3pt range
   if (S.possession === 'a') {
-    ctx.fillStyle = CHARS.nara.hue;
-    ctx.font = '9px monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-    ctx.fillText('▶ YOUR BALL', 10, 42);
-  } else {
-    ctx.fillStyle = CHARS.brendan.hue;
-    ctx.font = '9px monospace'; ctx.textAlign = 'right';
-    ctx.fillText('CPU BALL ◀', GW - 10, 42);
+    const ap = S.players[S.activeHuman];
+    const d = Math.abs(ap.x - HOOP_X);
+    if (d > SHOT_RANGE_2) {
+      ctx.save();
+      ctx.globalAlpha = 0.18 + Math.sin(S.frame * 0.1) * 0.05;
+      ctx.fillStyle = '#FFD700';
+      ctx.beginPath(); ctx.ellipse(ap.x, ap.y + 6, 22, 7, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.restore();
+    }
   }
+
+  drawHUD();
+
+  // Pause button (top-left)
+  ctx.fillStyle = 'rgba(255,255,255,0.15)';
+  ctx.fillRect(8, 6, 20, 16);
+  ctx.fillRect(8, 6, 6, 16); ctx.fillRect(22, 6, 6, 16);
+  ctx.fillStyle = 'rgba(255,255,255,0.25)';
+
+  drawControls();
+  drawOnboarding();
+
+  // Pass arrow + OPEN/LOBB indicator when teammate is unguarded
+  if (S.possession === 'a') {
+    const ap = S.players[S.activeHuman];
+    const tmId = S.activeHuman === 'nara' ? 'ethan' : 'nara';
+    const tm = S.players[tmId];
+    const closestDef = Math.min(...TEAM_B_IDS.map(id => Math.hypot(S.players[id].x - tm.x, S.players[id].y - tm.y)));
+    const isOpen = closestDef > 70;
+    const nearBasket = tm.x > HOOP_X - 75;
+    const alleyOopReady = nearBasket && !TEAM_B_IDS.some(id => Math.hypot(S.players[id].x - tm.x, S.players[id].y - tm.y) < 55);
+    if (ap.hasBall) {
+      ctx.save();
+      ctx.setLineDash([5, 8]);
+      const lineColor = alleyOopReady ? 'rgba(255,100,0,0.6)' : isOpen ? 'rgba(255,215,0,0.45)' : 'rgba(255,215,0,0.2)';
+      ctx.strokeStyle = lineColor;
+      ctx.lineWidth = (alleyOopReady || isOpen) ? 2 : 1.5;
+      ctx.beginPath(); ctx.moveTo(ap.x, ap.y); ctx.lineTo(tm.x, tm.y); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
+    if ((isOpen || alleyOopReady) && ap.hasBall) {
+      const pulse = 0.7 + Math.sin(S.frame * 0.22) * 0.25;
+      ctx.save();
+      ctx.globalAlpha = pulse;
+      const label = alleyOopReady ? '🙌 LOBB!' : 'OPEN!';
+      const labelColor = alleyOopReady ? '#FF8C00' : '#FFD700';
+      ctx.fillStyle = labelColor;
+      ctx.font = `bold ${alleyOopReady ? 10 : 9}px monospace`; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+      ctx.letterSpacing = '0';
+      ctx.fillText(label, tm.x, tm.y - 195);
+      ctx.restore();
+    }
+  }
+
+  // Defense: pulse indicator on inactive defender (tap to switch)
+  if (S.possession === 'b') {
+    const defId = S.activeHuman === 'nara' ? 'ethan' : 'nara';
+    const defP = S.players[defId];
+    const pulse = 0.25 + Math.sin(S.frame * 0.12) * 0.15;
+    ctx.save();
+    ctx.globalAlpha = pulse;
+    ctx.strokeStyle = CHARS[defId].hue;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([4, 6]);
+    ctx.beginPath(); ctx.ellipse(defP.x, defP.y + 4, 22, 8, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = CHARS[defId].hue;
+    ctx.font = '7px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    ctx.fillText('TAP', defP.x, defP.y - 15);
+    ctx.restore();
+  }
+
+  // Possession arrow — a small animated ball+arrow near the score
+  const posX = S.possession === 'a' ? 148 : GW - 148;
+  const posColor = S.possession === 'a' ? CHARS.nara.hue : CHARS.brendan.hue;
+  const bounce = Math.sin(S.frame * 0.18) * 2;
+  ctx.save();
+  ctx.translate(posX, 28 + bounce);
+  const dir = S.possession === 'a' ? 1 : -1;
+  ctx.fillStyle = posColor;
+  ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(S.possession === 'a' ? '▶' : '◀', 0, 0);
+  circle(dir * 13, 0, 5, posColor);
+  ctx.restore();
 }
 
 // ── Boot ─────────────────────────────────────────────────────────
