@@ -11,15 +11,13 @@
 html, body {
   width: 100%; height: 100%;
   background: #1a0a3e;
-  display: flex;
-  justify-content: center;
-  align-items: center;
   overflow: hidden;
   touch-action: none;
   -webkit-user-select: none; user-select: none;
 }
 canvas {
   display: block;
+  position: fixed;
   image-rendering: pixelated;
 }
 </style>
@@ -53,23 +51,14 @@ let _scale = 1, _rotated = false;
 
 function fitCanvas() {
   const lw = window.innerWidth, lh = window.innerHeight;
-  const isLandscape = lw > lh * 1.15;
-
-  if (isLandscape) {
-    _rotated = true;
-    // Rotate 90° CW so portrait game fills landscape screen
-    _scale = Math.min(lw / GH, lh / GW);
-    canvas.style.width  = GW * _scale + 'px';
-    canvas.style.height = GH * _scale + 'px';
-    canvas.style.transformOrigin = 'center center';
-    canvas.style.transform = 'rotate(90deg)';
-  } else {
-    _rotated = false;
-    _scale = Math.min(lw / GW, lh / GH);
-    canvas.style.width  = GW * _scale + 'px';
-    canvas.style.height = GH * _scale + 'px';
-    canvas.style.transform = '';
-  }
+  _rotated = false;
+  _scale = Math.min(lw / GW, lh / GH);
+  const cw = GW * _scale, ch = GH * _scale;
+  canvas.style.width  = cw + 'px';
+  canvas.style.height = ch + 'px';
+  canvas.style.left   = ((lw - cw) / 2) + 'px';
+  canvas.style.top    = ((lh - ch) / 2) + 'px';
+  canvas.style.transform = '';
 }
 window.addEventListener('resize', fitCanvas);
 fitCanvas();
@@ -813,9 +802,9 @@ function toGameCoords(clientX, clientY) {
       y: (clientY - rect.top)  / _scale,
     };
   }
-  // Canvas rotated 90° CW: map screen touch back to game coords
-  const cx = rect.left + rect.width  / 2;
-  const cy = rect.top  + rect.height / 2;
+  // Canvas rotated 90° CW: center is always at (lw/2, lh/2) since we positioned it that way
+  const cx = window.innerWidth  / 2;
+  const cy = window.innerHeight / 2;
   return {
     x: GW / 2 - (clientY - cy) / _scale,
     y: GH / 2 + (clientX - cx) / _scale,
