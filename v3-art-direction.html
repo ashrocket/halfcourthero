@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Half Court Hero V3 Art Direction</title>
+<style>
+  :root {
+    --ink: #191919;
+    --paper: #f4f1e8;
+    --paper-2: #fffdf5;
+    --court: #df6f2b;
+    --blue: #0d64a6;
+    --green: #42e326;
+    --pink: #ff2a75;
+    --brick: #d6b071;
+    --shadow: rgba(15, 16, 18, 0.18);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    color: var(--ink);
+    background:
+      radial-gradient(circle at 20% -10%, rgba(66, 227, 38, 0.18), transparent 28rem),
+      linear-gradient(180deg, #faf7ef 0%, #e9e1d2 100%);
+    font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    line-height: 1.45;
+  }
+
+  .page {
+    width: min(1120px, calc(100% - 32px));
+    margin: 0 auto;
+    padding: 32px 0 56px;
+  }
+
+  header {
+    min-height: 78vh;
+    display: grid;
+    grid-template-columns: minmax(0, 0.9fr) minmax(360px, 1.1fr);
+    gap: 36px;
+    align-items: center;
+  }
+
+  h1, h2, h3, p { margin: 0; }
+
+  .kicker {
+    font-size: 13px;
+    font-weight: 900;
+    letter-spacing: 0.18em;
+    color: var(--pink);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+
+  h1 {
+    font-size: clamp(48px, 8vw, 104px);
+    line-height: 0.9;
+    letter-spacing: 0;
+    max-width: 8ch;
+  }
+
+  .subtitle {
+    max-width: 560px;
+    margin-top: 20px;
+    font-size: clamp(18px, 2vw, 24px);
+    color: #373737;
+  }
+
+  .tagline {
+    display: inline-flex;
+    gap: 10px;
+    align-items: center;
+    margin-top: 28px;
+    padding: 10px 14px;
+    border: 2px solid var(--ink);
+    background: var(--paper-2);
+    box-shadow: 6px 6px 0 var(--green);
+    font-weight: 900;
+    font-size: 14px;
+    text-transform: uppercase;
+  }
+
+  .hero-frame {
+    position: relative;
+    min-height: 600px;
+    overflow: hidden;
+    border: 3px solid var(--ink);
+    background: #c7d8e3;
+    box-shadow: 16px 16px 0 rgba(25, 25, 25, 0.16);
+  }
+
+  .sky {
+    position: absolute;
+    inset: 0 0 45%;
+    background: linear-gradient(180deg, #286f9d 0%, #9bc3c8 100%);
+  }
+
+  .sun-haze {
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at 78% 12%, rgba(255,255,255,0.72), transparent 18rem);
+    mix-blend-mode: screen;
+  }
+
+  .brick {
+    position: absolute;
+    inset: 22% 0 43%;
+    background:
+      linear-gradient(90deg, transparent 0 48px, rgba(120, 76, 32, 0.25) 48px 50px) 0 0 / 100px 28px,
+      linear-gradient(0deg, transparent 0 25px, rgba(120, 76, 32, 0.25) 25px 27px) 0 0 / 100px 28px,
+      var(--brick);
+  }
+
+  .doors {
+    position: absolute;
+    left: 34%;
+    right: 28%;
+    top: 23%;
+    height: 36%;
+    background: linear-gradient(90deg, #0c5a8f 0 49%, #073d66 49% 51%, #0c5a8f 51%);
+    border: 3px solid #063759;
+  }
+
+  .fence {
+    position: absolute;
+    inset: 18% -10px 29%;
+    opacity: 0.5;
+    background:
+      repeating-linear-gradient(54deg, transparent 0 19px, #121212 20px 22px, transparent 23px 42px),
+      repeating-linear-gradient(126deg, transparent 0 19px, #121212 20px 22px, transparent 23px 42px);
+    border-top: 5px solid #111;
+    border-bottom: 5px solid #111;
+  }
+
+  .court {
+    position: absolute;
+    inset: 59% 0 0;
+    background:
+      linear-gradient(12deg, transparent 0 42%, rgba(255,255,255,0.9) 42.4% 43%, transparent 43.4%),
+      linear-gradient(180deg, #ee8c40 0%, var(--court) 100%);
+  }
+
+  .paint {
+    position: absolute;
+    left: -6%;
+    bottom: -4%;
+    width: 58%;
+    aspect-ratio: 1.75;
+    background: #2b9bc3;
+    border: 6px solid rgba(255,255,255,0.9);
+    transform: perspective(360px) rotateX(54deg) rotateZ(-4deg);
+  }
+
+  .video-bars {
+    position: absolute;
+    inset: auto 0 0;
+    height: 34px;
+    background: rgba(0,0,0,0.72);
+  }
+
+  .progress {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 28px;
+    height: 5px;
+    background: rgba(255,255,255,0.7);
+  }
+
+  .progress::before {
+    content: "";
+    display: block;
+    width: 36%;
+    height: 100%;
+    background: #ff174c;
+  }
+
+  .cartoon-nara {
+    position: absolute;
+    left: 48%;
+    bottom: 36px;
+    width: 178px;
+    height: 396px;
+    transform: translateX(-50%) rotate(-2deg);
+  }
+
+  .head {
+    position: absolute;
+    left: 34px;
+    top: 18px;
+    width: 112px;
+    height: 118px;
+    border: 4px solid #090909;
+    border-radius: 48% 48% 44% 44%;
+    background: #f1c188;
+    z-index: 3;
+  }
+
+  .hair {
+    position: absolute;
+    left: 16px;
+    top: 0;
+    width: 144px;
+    height: 132px;
+    background: #07110e;
+    border: 4px solid #090909;
+    border-radius: 52% 48% 18% 18%;
+    clip-path: polygon(5% 16%, 42% 0, 82% 12%, 100% 38%, 84% 96%, 54% 86%, 19% 100%, 0 62%);
+    z-index: 4;
+    pointer-events: none;
+  }
+
+  .face {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+  }
+
+  .eye {
+    position: absolute;
+    top: 54px;
+    width: 37px;
+    height: 20px;
+    border: 3px solid #080808;
+    border-radius: 50%;
+    background: #fff;
+    transform: rotate(-8deg);
+  }
+
+  .eye.left { left: 25px; }
+  .eye.right { right: 21px; }
+
+  .eye::after {
+    content: "";
+    position: absolute;
+    left: 15px;
+    top: 8px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #101010;
+  }
+
+  .lid {
+    position: absolute;
+    left: -3px;
+    right: -3px;
+    top: -3px;
+    height: 11px;
+    border-bottom: 3px solid #111;
+    background: #f1c188;
+    border-radius: 999px 999px 0 0;
+  }
+
+  .mouth {
+    position: absolute;
+    left: 48px;
+    top: 87px;
+    width: 28px;
+    height: 12px;
+    border-bottom: 3px solid #4a1919;
+    border-radius: 50%;
+  }
+
+  .body {
+    position: absolute;
+    left: 42px;
+    top: 130px;
+    width: 96px;
+    height: 128px;
+    border: 4px solid #090909;
+    background: #06130f;
+    border-radius: 28px 28px 12px 12px;
+    z-index: 2;
+  }
+
+  .arm {
+    position: absolute;
+    width: 32px;
+    height: 126px;
+    border: 4px solid #090909;
+    background: #f1c188;
+    border-radius: 20px;
+    z-index: 1;
+  }
+
+  .arm.left {
+    left: 22px;
+    top: 144px;
+    transform: rotate(18deg);
+  }
+
+  .arm.right {
+    right: 10px;
+    top: 108px;
+    transform: rotate(-42deg);
+    transform-origin: top center;
+  }
+
+  .finger {
+    position: absolute;
+    right: -5px;
+    top: 105px;
+    width: 12px;
+    height: 40px;
+    border: 4px solid #090909;
+    border-radius: 10px;
+    background: #f1c188;
+  }
+
+  .shorts {
+    position: absolute;
+    left: 34px;
+    top: 246px;
+    width: 112px;
+    height: 76px;
+    border: 4px solid #090909;
+    background: #145cff;
+    clip-path: polygon(0 0, 100% 0, 92% 100%, 57% 100%, 50% 42%, 42% 100%, 7% 100%);
+    z-index: 3;
+  }
+
+  .leg {
+    position: absolute;
+    top: 312px;
+    width: 24px;
+    height: 76px;
+    border-left: 4px solid #090909;
+    border-right: 4px solid #090909;
+    background: #f1c188;
+    z-index: 1;
+  }
+
+  .leg.left { left: 48px; transform: rotate(5deg); }
+  .leg.right { right: 44px; transform: rotate(-4deg); }
+
+  .sock {
+    position: absolute;
+    bottom: 22px;
+    width: 27px;
+    height: 22px;
+    background: #e9e7dc;
+    border-left: 4px solid #090909;
+    border-right: 4px solid #090909;
+    z-index: 2;
+  }
+
+  .sock.left { left: 48px; }
+  .sock.right { right: 44px; }
+
+  .shoe {
+    position: absolute;
+    bottom: 0;
+    width: 54px;
+    height: 28px;
+    background: #29251f;
+    border: 4px solid #090909;
+    border-radius: 20px 20px 9px 9px;
+    z-index: 3;
+  }
+
+  .shoe.left { left: 28px; }
+  .shoe.right { right: 24px; }
+
+  .ball {
+    position: absolute;
+    right: -20px;
+    top: 78px;
+    width: 82px;
+    height: 82px;
+    border: 4px solid #090909;
+    border-radius: 50%;
+    background: #f27918;
+    z-index: 6;
+    overflow: hidden;
+  }
+
+  .ball::before,
+  .ball::after {
+    content: "";
+    position: absolute;
+    inset: 9px;
+    border: 5px solid #090909;
+    border-left: 0;
+    border-right: 0;
+    border-radius: 50%;
+    transform: rotate(28deg);
+  }
+
+  .ball::after {
+    inset: -8px 30px;
+    border: 0;
+    border-left: 5px solid #090909;
+    border-right: 5px solid #090909;
+    transform: rotate(-12deg);
+  }
+
+  section {
+    margin-top: 54px;
+  }
+
+  .section-title {
+    display: flex;
+    align-items: end;
+    gap: 14px;
+    margin-bottom: 18px;
+  }
+
+  .section-title h2 {
+    font-size: clamp(30px, 4vw, 52px);
+    line-height: 1;
+  }
+
+  .number {
+    font-size: 14px;
+    font-weight: 900;
+    color: var(--paper-2);
+    background: var(--ink);
+    padding: 6px 8px;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 18px;
+  }
+
+  .card {
+    background: var(--paper-2);
+    border: 2px solid var(--ink);
+    padding: 18px;
+    box-shadow: 7px 7px 0 var(--shadow);
+  }
+
+  .card h3 {
+    font-size: 19px;
+    margin-bottom: 8px;
+  }
+
+  .card p,
+  .card li {
+    color: #3d3d3d;
+    font-size: 15px;
+  }
+
+  ul {
+    margin: 10px 0 0;
+    padding-left: 18px;
+  }
+
+  .screen-strip {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 18px;
+  }
+
+  .mini-screen {
+    min-height: 280px;
+    border: 3px solid var(--ink);
+    position: relative;
+    overflow: hidden;
+    background: #eee;
+  }
+
+  .mini-screen.title {
+    background:
+      linear-gradient(90deg, transparent 0 18%, rgba(66,227,38,0.86) 18% 24%, transparent 24% 100%),
+      linear-gradient(180deg, #bbb 0, #f8f8f8 55%, #e4e4e4 100%);
+  }
+
+  .mini-screen.play {
+    background:
+      repeating-linear-gradient(58deg, transparent 0 18px, rgba(0,0,0,0.22) 19px 21px, transparent 22px 40px),
+      linear-gradient(180deg, #cda665 0 33%, #0f6da1 33% 35%, #d9702d 35% 100%);
+  }
+
+  .mini-screen.end {
+    background:
+      linear-gradient(180deg, rgba(0,0,0,0.25), rgba(0,0,0,0.55)),
+      linear-gradient(90deg, #d8b06f 0 30%, #075f9a 30% 68%, #f0dfc6 68%);
+  }
+
+  .mini-label {
+    position: absolute;
+    left: 14px;
+    top: 14px;
+    padding: 7px 9px;
+    background: var(--paper-2);
+    border: 2px solid var(--ink);
+    font-weight: 900;
+    font-size: 13px;
+  }
+
+  .play-icon {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 70px;
+    height: 70px;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    background: rgba(0,0,0,0.36);
+  }
+
+  .play-icon::after {
+    content: "";
+    position: absolute;
+    left: 28px;
+    top: 20px;
+    border-left: 24px solid white;
+    border-top: 15px solid transparent;
+    border-bottom: 15px solid transparent;
+  }
+
+  .caption {
+    position: absolute;
+    left: 16px;
+    right: 16px;
+    bottom: 16px;
+    color: white;
+    font-size: 24px;
+    font-weight: 950;
+    line-height: 1.05;
+    text-shadow: 0 2px 0 #000;
+  }
+
+  .asset-board {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+  }
+
+  .asset-card {
+    border: 2px solid var(--ink);
+    background: var(--paper-2);
+    overflow: hidden;
+    box-shadow: 7px 7px 0 var(--shadow);
+  }
+
+  .asset-card img {
+    display: block;
+    width: 100%;
+    height: 360px;
+    object-fit: contain;
+    background:
+      linear-gradient(45deg, #eee 25%, transparent 25%),
+      linear-gradient(-45deg, #eee 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, #eee 75%),
+      linear-gradient(-45deg, transparent 75%, #eee 75%);
+    background-size: 22px 22px;
+    background-position: 0 0, 0 11px, 11px -11px, -11px 0;
+  }
+
+  .asset-card figcaption {
+    padding: 14px 16px 16px;
+    border-top: 2px solid var(--ink);
+    font-size: 14px;
+    color: #383838;
+  }
+
+  .prompt {
+    white-space: pre-wrap;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    background: #202020;
+    color: #f9f3df;
+    padding: 18px;
+    border: 2px solid var(--ink);
+    box-shadow: 7px 7px 0 var(--green);
+    font-size: 14px;
+    overflow-x: auto;
+  }
+
+  .avoid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .pill {
+    padding: 8px 11px;
+    border: 2px solid var(--ink);
+    background: #fff;
+    font-size: 13px;
+    font-weight: 900;
+  }
+
+  .pill.no {
+    color: #fff;
+    background: #cf2f20;
+  }
+
+  footer {
+    margin-top: 54px;
+    padding-top: 18px;
+    border-top: 2px solid var(--ink);
+    color: #555;
+    font-size: 14px;
+  }
+
+  @media (max-width: 860px) {
+    header,
+    .grid,
+    .screen-strip,
+    .asset-board {
+      grid-template-columns: 1fr;
+    }
+
+    .hero-frame {
+      min-height: 560px;
+    }
+  }
+</style>
+</head>
+<body>
+  <main class="page">
+    <header>
+      <div>
+        <p class="kicker">V3 Art Direction</p>
+        <h1>Half Court Hero</h1>
+        <p class="subtitle">A playable music-video frame: live-action schoolyard footage, rough cartoon basketball overlays, and band-member styling pulled from the “Lizzie McGuire” video world.</p>
+        <div class="tagline">North star: video still first, game second</div>
+      </div>
+
+      <div class="hero-frame" aria-label="Illustrated art direction mockup">
+        <div class="sky"></div>
+        <div class="brick"></div>
+        <div class="doors"></div>
+        <div class="fence"></div>
+        <div class="court"></div>
+        <div class="paint"></div>
+        <div class="sun-haze"></div>
+        <div class="cartoon-nara">
+          <div class="hair"></div>
+          <div class="head">
+            <div class="face">
+              <div class="eye left"><div class="lid"></div></div>
+              <div class="eye right"><div class="lid"></div></div>
+              <div class="mouth"></div>
+            </div>
+          </div>
+          <div class="arm left"></div>
+          <div class="arm right"><div class="finger"></div></div>
+          <div class="body"></div>
+          <div class="shorts"></div>
+          <div class="leg left"></div>
+          <div class="leg right"></div>
+          <div class="sock left"></div>
+          <div class="sock right"></div>
+          <div class="shoe left"></div>
+          <div class="shoe right"></div>
+          <div class="ball"></div>
+        </div>
+        <div class="progress"></div>
+        <div class="video-bars"></div>
+      </div>
+    </header>
+
+    <section>
+      <div class="section-title">
+        <span class="number">01</span>
+        <h2>Visual Pillars</h2>
+      </div>
+      <div class="grid">
+        <article class="card">
+          <h3>Live-Action Base</h3>
+          <p>Schoolyard court, chain-link fence, beige brick, blue doors, hard sun, blown highlights, and handheld-video framing. The background should feel captured, not designed.</p>
+        </article>
+        <article class="card">
+          <h3>Cartoon Intervention</h3>
+          <p>Nara and the basketball can be loose 2D overlays. Keep the line work wobbly, flat, and a little awkward, like a cartoon drawn over a paused video.</p>
+        </article>
+        <article class="card">
+          <h3>Band Identity</h3>
+          <p>Use the green racing jersey, WMPG shirt with orange sleeves, striped shirt, beanies, instruments, and casual band poses as the cast language.</p>
+        </article>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-title">
+        <span class="number">02</span>
+        <h2>Screen Direction</h2>
+      </div>
+      <div class="screen-strip">
+        <div class="mini-screen title">
+          <div class="mini-label">TITLE</div>
+          <div class="play-icon"></div>
+          <div class="caption">NARA'S ROOM<br>HALF COURT HERO</div>
+        </div>
+        <div class="mini-screen play">
+          <div class="mini-label">PLAY</div>
+          <div class="play-icon"></div>
+          <div class="caption">Cartoon Nara over a real court</div>
+        </div>
+        <div class="mini-screen end">
+          <div class="mini-label">FREEZE FRAME</div>
+          <div class="play-icon"></div>
+          <div class="caption">Score as music-video caption</div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-title">
+        <span class="number">03</span>
+        <h2>Character Sheet</h2>
+      </div>
+      <div class="grid">
+        <article class="card">
+          <h3>Nara</h3>
+          <ul>
+            <li>Black bob, black tee, blue athletic shorts.</li>
+            <li>Half-lidded confidence, pursed mouth.</li>
+            <li>Most cartoonlike character in the game.</li>
+          </ul>
+        </article>
+        <article class="card">
+          <h3>Ethan</h3>
+          <ul>
+            <li>Lime racing jersey, cap, sunglasses, bass presence.</li>
+            <li>Relaxed stance, hands in pockets, cool sideline energy.</li>
+            <li>Good as power scorer or assist character.</li>
+          </ul>
+        </article>
+        <article class="card">
+          <h3>Brendan + James</h3>
+          <ul>
+            <li>WMPG shirt over orange sleeves for Brendan.</li>
+            <li>Striped shirt and gray beanie for James.</li>
+            <li>Use goofy basketball poses and freeze-frame reactions.</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-title">
+        <span class="number">04</span>
+        <h2>Current Asset Gap</h2>
+      </div>
+      <div class="asset-board">
+        <figure class="asset-card">
+          <img src="assets/nara_sprite.png" alt="Current Nara sprite">
+          <figcaption>Current Nara sprite is clean and polished. V3 should make her rougher, flatter, more awkward, and closer to the black-shirt/blue-shorts cartoon overlay.</figcaption>
+        </figure>
+        <figure class="asset-card">
+          <img src="assets/court_env.png" alt="Current court background">
+          <figcaption>Current court is illustrative. V3 should move toward a blurred schoolyard/video-still court with fence, brick, blue doors, and hard sunlight.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-title">
+        <span class="number">05</span>
+        <h2>Gameplay Feel</h2>
+      </div>
+      <div class="grid">
+        <article class="card">
+          <h3>Keep</h3>
+          <p>The timing-based shot ring, pass/shoot/block/steal controls, first-to-11 half-court structure, and simple static-page deployment.</p>
+        </article>
+        <article class="card">
+          <h3>Improve</h3>
+          <p>Make shot timing feel like syncing to a beat. Make rebound and turnover outcomes legible. Let defense affect shot quality instead of only binary block/steal checks.</p>
+        </article>
+        <article class="card">
+          <h3>Add Personality</h3>
+          <p>Use freeze frames, rough captions, band quips, basketball taunts, and small pose changes instead of arcade particles or neon celebration effects.</p>
+        </article>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-title">
+        <span class="number">06</span>
+        <h2>Asset Prompt</h2>
+      </div>
+      <div class="prompt">Create a still frame for a browser basketball game inspired by an early-2000s indie music video. The scene is an outdoor schoolyard basketball court with chain-link fence, beige brick building, blue doors, harsh midday sun, blown highlights, and handheld video texture.
+
+Add one rough 2D cartoon woman composited into the scene: black bob haircut, black t-shirt, bright blue athletic shorts, white socks, chunky dark shoes, half-lidded eyes, pursed confident mouth, casually spinning an orange basketball.
+
+Style should look like a loose adult-cartoon overlay on a live-action video still. Avoid pixel art, neon arcade UI, fantasy backgrounds, character select screens, polished anime, or glossy vector art.</div>
+    </section>
+
+    <section>
+      <div class="section-title">
+        <span class="number">07</span>
+        <h2>Avoid List</h2>
+      </div>
+      <div class="avoid">
+        <span class="pill no">Purple space background</span>
+        <span class="pill no">Neon glow</span>
+        <span class="pill no">Pixel-art UI</span>
+        <span class="pill no">Character select lineup</span>
+        <span class="pill no">Generic arcade branding</span>
+        <span class="pill no">Polished anime sprites</span>
+        <span class="pill no">Glossy vector art</span>
+        <span class="pill no">Overdesigned HUD</span>
+      </div>
+    </section>
+
+    <footer>
+      This document is design material only. It does not alter the game runtime.
+    </footer>
+  </main>
+</body>
+</html>
