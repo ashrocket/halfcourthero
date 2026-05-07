@@ -262,8 +262,8 @@ const CHARS = {
     _3ptBonus: 0.08, _spd: 0.95, _stealBonus: 0
   }
 };
-const TEAM_A_IDS = ['nara', 'ethan'];
-const TEAM_B_IDS = ['brendan', 'james'];
+let TEAM_A_IDS = ['nara', 'ethan'];
+let TEAM_B_IDS = ['brendan', 'james'];
 
 // ── Drawing Helpers ─────────────────────────────────────────────
 function rr(x, y, w, h, r) {
@@ -310,15 +310,20 @@ function mkPlayer(id, team, x, facing) {
 }
 
 function initState() {
-  const prevDiff = S && S._difficulty;
+  const prevDiff     = S && S._difficulty;
+  const prevPlayer   = S && S._selectedPlayer;
+  const prevTeammate = S && S._selectedTeammate;
   S = {
     screen: 'title',
     _difficulty: prevDiff || 'normal',
+    _selectedPlayer:   prevPlayer   || 'nara',
+    _selectedTeammate: prevTeammate || 'ethan',
+    _charSelectStep: 1,
     frame: 0,
     score: [0, 0],
     possession: 'a',
 
-    ball: { x: 100, y: FLOOR_Y - 30, vx: 0, vy: 0, inAir: false, carrier: 'nara', rot: 0 },
+    ball: { x: 100, y: FLOOR_Y - 30, vx: 0, vy: 0, inAir: false, carrier: TEAM_A_IDS[0], rot: 0 },
 
     players: {
       nara:    mkPlayer('nara',    'a', 100,  1),
@@ -327,7 +332,7 @@ function initState() {
       james:   mkPlayer('james',   'b', 320, -1),
     },
 
-    activeHuman: 'nara',
+    activeHuman: prevPlayer || 'nara',
 
     // Thoughts / popups
     thoughts: [],
@@ -350,7 +355,7 @@ function initState() {
     _humanTimeouts: 1,
     _possessionMoves: 0,
     _perfectFlash: null,
-    _playerScores: { nara: 0, ethan: 0 },
+    _playerScores: { [TEAM_A_IDS[0]]: 0, [TEAM_A_IDS[1]]: 0 },
     _coldStreak: 0,
     _teamChemistry: 0,
     _crowdEnergy: 0,
@@ -381,8 +386,8 @@ function initState() {
     onboardingTimer: 180, // ~3 seconds at 60fps
   };
 
-  S.players.nara.hasBall = true;
-  S.ball.carrier = 'nara';
+  S.players[TEAM_A_IDS[0]].hasBall = true;
+  S.ball.carrier = TEAM_A_IDS[0];
 }
 
 // ── Court Drawing ───────────────────────────────────────────────
@@ -623,6 +628,7 @@ function drawChar(id, hasBall) {
     const W = H * spr.naturalWidth / spr.naturalHeight;
     ctx.drawImage(spr, -W / 2, -H, W, H);
   }
+  drawCharOverlay(id);
 
   if (hasBall) {
     if (anim === 'shoot' || anim === 'jump') {
@@ -639,6 +645,119 @@ function drawChar(id, hasBall) {
   }
 
   ctx.restore();
+}
+
+function drawCharOverlay(id) {
+  if (id === 'ethan') {
+    // Neck skin patch (fixes any PIL transparency from old deployed sprite)
+    ctx.fillStyle = '#C68642';
+    ctx.beginPath(); ctx.ellipse(0, -126, 7, 5, 0, 0, Math.PI * 2); ctx.fill();
+
+    // Straight shoulder-length brown hair panels covering original hippie hair
+    ctx.fillStyle = '#3D2011';
+    ctx.beginPath();
+    ctx.moveTo(-8, -164); ctx.lineTo(-17, -162); ctx.lineTo(-19, -118); ctx.lineTo(-9, -118); ctx.lineTo(-9, -160);
+    ctx.closePath(); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(8, -164); ctx.lineTo(17, -162); ctx.lineTo(19, -118); ctx.lineTo(9, -118); ctx.lineTo(9, -160);
+    ctx.closePath(); ctx.fill();
+    // Subtle highlight stripe
+    ctx.fillStyle = '#5C3520';
+    ctx.beginPath();
+    ctx.moveTo(-9, -162); ctx.lineTo(-11, -162); ctx.lineTo(-12, -120); ctx.lineTo(-10, -120);
+    ctx.closePath(); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(9, -162); ctx.lineTo(11, -162); ctx.lineTo(12, -120); ctx.lineTo(10, -120);
+    ctx.closePath(); ctx.fill();
+
+    // Backward black baseball cap
+    ctx.fillStyle = '#0A0A0A';
+    ctx.beginPath(); ctx.ellipse(0, -161, 15, 13, 0, Math.PI, 0); ctx.fill(); // dome
+    ctx.fillRect(-15, -163, 30, 8); // cap band
+    // Brim at back-of-head (left side when facing right)
+    ctx.beginPath();
+    ctx.moveTo(-12, -165); ctx.lineTo(-27, -166); ctx.lineTo(-28, -162); ctx.lineTo(-12, -161);
+    ctx.closePath(); ctx.fill();
+    // Snap tab at front
+    ctx.fillStyle = '#2A2A2A';
+    ctx.beginPath(); ctx.roundRect(13, -162, 5, 3, 1); ctx.fill();
+
+    // Round dark sunglasses
+    const eyeY = -150;
+    ctx.fillStyle = 'rgba(5,5,5,0.88)';
+    for (const ex of [-8, 8]) {
+      ctx.beginPath(); ctx.arc(ex, eyeY, 5.5, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#111'; ctx.lineWidth = 1.5; ctx.stroke();
+    }
+    ctx.strokeStyle = '#111'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(-2.5, eyeY); ctx.lineTo(2.5, eyeY); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-13.5, eyeY); ctx.lineTo(-20, eyeY - 1); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(13.5, eyeY); ctx.lineTo(20, eyeY - 1); ctx.stroke();
+  }
+
+  if (id === 'james') {
+    // Dark camo bucket hat
+    ctx.fillStyle = '#3A4A28';
+    ctx.beginPath(); ctx.ellipse(0, -168, 14, 7, 0, 0, Math.PI * 2); ctx.fill(); // crown top
+    ctx.fillRect(-14, -168, 28, 14); // crown body
+    ctx.beginPath(); ctx.ellipse(0, -154, 22, 6, 0, 0, Math.PI * 2); ctx.fill(); // brim
+    ctx.fillStyle = '#2A3318'; // brim underside
+    ctx.beginPath(); ctx.ellipse(0, -153, 22, 4, 0, 0, Math.PI * 2); ctx.fill();
+    // Camo blobs
+    ctx.fillStyle = '#252E18';
+    ctx.beginPath(); ctx.ellipse(-6, -163, 4, 3, 0.3, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(7, -159, 3, 2.5, -0.3, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(1, -167, 2.5, 1.5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#5A6A38';
+    ctx.beginPath(); ctx.ellipse(-2, -161, 2.5, 2, -0.2, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(8, -157, 2, 1.5, 0.4, 0, Math.PI * 2); ctx.fill();
+
+    // Round amber-frame glasses
+    const eyeYj = -149;
+    ctx.strokeStyle = '#B87030'; ctx.lineWidth = 2;
+    ctx.fillStyle = 'rgba(255,200,150,0.1)';
+    for (const ex of [-8, 8]) {
+      ctx.beginPath(); ctx.arc(ex, eyeYj, 5.5, 0, Math.PI * 2);
+      ctx.fill(); ctx.stroke();
+    }
+    ctx.strokeStyle = '#B87030'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(-2.5, eyeYj); ctx.lineTo(2.5, eyeYj); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-13.5, eyeYj); ctx.lineTo(-20, eyeYj - 1); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(13.5, eyeYj); ctx.lineTo(20, eyeYj - 1); ctx.stroke();
+
+    // 5 o'clock shadow
+    ctx.fillStyle = 'rgba(65,35,15,0.42)';
+    ctx.beginPath(); ctx.ellipse(0, -137, 11, 9, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(0, -144, 9, 4.5, 0, 0, Math.PI * 2); ctx.fill();
+  }
+
+  if (id === 'brendan') {
+    // Full reddish beard
+    ctx.fillStyle = '#C03A15';
+    ctx.beginPath(); ctx.ellipse(0, -131, 14, 12, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(0, -141, 11, 5, 0, 0, Math.PI * 2); ctx.fill(); // mustache
+    ctx.fillStyle = '#E04A20';
+    ctx.beginPath(); ctx.ellipse(0, -132, 9, 7, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#8A2510';
+    ctx.beginPath(); ctx.ellipse(0, -122, 10, 5, 0, 0, Math.PI * 2); ctx.fill();
+
+    // Black beanie
+    ctx.fillStyle = '#0F0F0F';
+    ctx.beginPath(); ctx.ellipse(0, -163, 16, 13, 0, Math.PI, 0); ctx.fill(); // dome
+    ctx.fillRect(-16, -165, 32, 13);
+    ctx.fillStyle = '#0A0A0A';
+    ctx.fillRect(-16, -154, 32, 5); // ribbed band
+    ctx.strokeStyle = '#2A2A2A'; ctx.lineWidth = 0.8;
+    for (let i = -14; i <= 14; i += 3) {
+      ctx.beginPath(); ctx.moveTo(i, -155); ctx.lineTo(i, -150); ctx.stroke();
+    }
+
+    // Curly hair peeking below beanie on sides
+    ctx.fillStyle = '#180E0C';
+    for (const [hx, hy, hr] of [[-17,-152,4],[-20,-146,3.5],[-18,-140,4],[17,-152,4],[20,-146,3.5],[18,-140,4]]) {
+      ctx.beginPath(); ctx.arc(hx, hy, hr, 0, Math.PI * 2); ctx.fill();
+    }
+  }
 }
 
 function drawFace(d, anim, hy, f) {
@@ -1610,6 +1729,125 @@ function drawTitle() {
   ctx.fillText('BANDMUSICGAMES.PARTY', GW / 2, GH - 20);
 }
 
+function drawCharSelect() {
+  const bg = ctx.createLinearGradient(0, 0, 0, GH);
+  bg.addColorStop(0, '#1a0a3e'); bg.addColorStop(1, '#0a0a30');
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, GW, GH);
+
+  const step     = S._charSelectStep || 1;
+  const chosen   = S._selectedPlayer;
+  const teammate = S._selectedTeammate;
+
+  // Header
+  ctx.save();
+  ctx.translate(GW / 2, 72);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  if (step === 1) {
+    ctx.fillStyle = '#FFD700';
+    ctx.font = 'bold 13px monospace'; ctx.letterSpacing = '0.2em';
+    ctx.fillText('PICK YOUR PLAYER', 0, 0);
+  } else {
+    ctx.fillStyle = CHARS[chosen].hue;
+    ctx.font = 'bold 11px monospace'; ctx.letterSpacing = '0.15em';
+    ctx.fillText(CHARS[chosen].name + '  ✓', 0, -11);
+    ctx.fillStyle = '#FFD700';
+    ctx.font = 'bold 12px monospace'; ctx.letterSpacing = '0.2em';
+    ctx.fillText('PICK TEAMMATE', 0, 7);
+  }
+  ctx.restore();
+
+  const all = ['nara', 'ethan', 'brendan', 'james'];
+  const CX  = [50, 148, 246, 344];
+  const CY  = 330;
+
+  for (let i = 0; i < 4; i++) {
+    const id  = all[i];
+    const cx  = CX[i];
+    const d   = CHARS[id];
+    const isChosen = id === chosen;
+    const isTm     = id === teammate;
+    const isGrayed = step === 2 && isChosen;
+    const bob = Math.sin(S.frame * 0.04 + i * 1.2) * 4;
+
+    ctx.save();
+    if (isGrayed) ctx.globalAlpha = 0.4;
+    if (isChosen || isTm) { ctx.shadowColor = d.hue; ctx.shadowBlur = 20; }
+    ctx.translate(cx, CY + bob);
+    if (i >= 2) ctx.scale(-1, 1);
+    drawCharSprite(id, 'idle', S.frame + i * 30);
+    ctx.restore();
+
+    const isSel = isChosen || isTm;
+    fillRR(cx - 32, CY + 8, 64, 52, 6,
+      isSel ? d.hue : (isGrayed ? 'rgba(40,30,70,0.5)' : 'rgba(0,0,0,0.65)'),
+      isSel ? '#FFF' : d.hue, isSel ? 2 : 1);
+    ctx.fillStyle = isSel ? '#111' : (isGrayed ? 'rgba(255,255,255,0.3)' : d.hue);
+    ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.letterSpacing = '0';
+    ctx.fillText(d.name, cx, CY + 20);
+    ctx.fillStyle = isSel ? '#222' : 'rgba(255,255,255,0.5)';
+    ctx.font = '7px monospace';
+    ctx.fillText((d.abilityEmoji || '') + ' ' + (d.ability || '').split(' ')[0], cx, CY + 31);
+    if (isChosen) {
+      ctx.fillStyle = '#111'; ctx.font = 'bold 8px monospace';
+      ctx.fillText('YOU', cx, CY + 44);
+    } else if (isTm) {
+      ctx.fillStyle = '#111'; ctx.font = 'bold 7px monospace';
+      ctx.fillText('TEAMMATE', cx, CY + 44);
+    }
+  }
+
+  // Team divider on step 1
+  if (step === 1) {
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.fillRect(GW / 2 - 1, 150, 2, 200);
+    ctx.fillStyle = 'rgba(255,255,255,0.25)';
+    ctx.font = '8px monospace'; ctx.textAlign = 'center'; ctx.letterSpacing = '0';
+    ctx.fillText('YOUR TEAM', GW / 4, 148);
+    ctx.fillText('CPU TEAM', GW * 3 / 4, 148);
+  }
+
+  // Tap hint
+  const tapAlpha = 0.5 + Math.sin(S.frame * 0.07) * 0.35;
+  ctx.fillStyle = `rgba(255,255,255,${tapAlpha * 0.65})`;
+  ctx.font = '9px monospace'; ctx.textAlign = 'center'; ctx.letterSpacing = '0.1em';
+  ctx.fillText(step === 1 ? 'TAP A PLAYER' : 'TAP TEAMMATE', GW / 2, GH - 55);
+
+  // PLAY button once both selected
+  if (chosen && teammate) {
+    fillRR(GW / 2 - 58, GH - 38, 116, 28, 8, '#FFD700', '#FFF', 2);
+    ctx.fillStyle = '#111'; ctx.font = 'bold 13px monospace';
+    ctx.textAlign = 'center'; ctx.letterSpacing = '0.15em'; ctx.textBaseline = 'middle';
+    ctx.fillText('▶  PLAY!', GW / 2, GH - 24);
+  }
+}
+
+function startGameWithSelection() {
+  const player   = S._selectedPlayer   || 'nara';
+  const teammate = S._selectedTeammate || 'ethan';
+  const all      = ['nara', 'ethan', 'brendan', 'james'];
+  const cpu      = all.filter(id => id !== player && id !== teammate);
+
+  TEAM_A_IDS = [player, teammate];
+  TEAM_B_IDS = cpu;
+
+  const posA = [[80, 1], [150, 1]];
+  const posB = [[260, -1], [320, -1]];
+  for (let i = 0; i < 2; i++) {
+    S.players[TEAM_A_IDS[i]] = mkPlayer(TEAM_A_IDS[i], 'a', posA[i][0], posA[i][1]);
+  }
+  for (let i = 0; i < 2; i++) {
+    S.players[TEAM_B_IDS[i]] = mkPlayer(TEAM_B_IDS[i], 'b', posB[i][0], posB[i][1]);
+  }
+
+  S.activeHuman = player;
+  S.ball.carrier = player;
+  S.players[player].hasBall = true;
+  S.possession = 'a';
+  S._playerScores = { [TEAM_A_IDS[0]]: 0, [TEAM_A_IDS[1]]: 0 };
+  S.screen = 'playing';
+}
+
 function drawCharSprite(id, anim, f) {
   const spr = sprites[id];
   const phase = f * 0.05;
@@ -1623,6 +1861,7 @@ function drawCharSprite(id, anim, f) {
     const W = H * spr.naturalWidth / spr.naturalHeight;
     ctx.drawImage(spr, -W / 2, -H, W, H);
   }
+  drawCharOverlay(id);
 }
 
 // ── Game Over Screen ─────────────────────────────────────────────
@@ -1634,7 +1873,7 @@ function drawGameOver() {
   // Ambient confetti on win screen
   if (S.confetti.length < 20 && S.frame % 3 === 0) {
     const won2 = S.score[0] > S.score[1];
-    const colors2 = won2 ? [CHARS.nara.hue, CHARS.ethan.hue, '#FFD700', '#FFF'] : [CHARS.brendan.hue, '#FF4444', '#FFF'];
+    const colors2 = won2 ? [CHARS[TEAM_A_IDS[0]].hue, CHARS[TEAM_A_IDS[1]].hue, '#FFD700', '#FFF'] : [CHARS[TEAM_B_IDS[0]].hue, '#FF4444', '#FFF'];
     S.confetti.push({
       x: Math.random() * GW, y: -10,
       vx: (Math.random() - 0.5) * 3,
@@ -1669,7 +1908,7 @@ function drawGameOver() {
   ctx.fillStyle = 'rgba(255,255,255,0.4)'; ctx.fillText('-', GW / 2, 340);
   ctx.fillStyle = CHARS.brendan.hue; ctx.fillText(S.score[1], GW / 2 + 60, 340);
 
-  const ids = ['nara', 'ethan', 'brendan', 'james'];
+  const ids = [...TEAM_A_IDS, ...TEAM_B_IDS];
   const xs   = [60, 145, 245, 330];
   for (let i = 0; i < 4; i++) {
     const isWinner = (won && i < 2) || (!won && i >= 2);
@@ -1712,7 +1951,7 @@ function drawGameOver() {
     won && (st.alleyOops||0) + (st.assists||0) >= 4 ? ['SHOWTIME', `${(st.alleyOops||0)+(st.assists||0)} PLAYS`, '🎬'] : null,
     (() => {
       const ps = S._playerScores || {};
-      const mvpId = (ps.nara || 0) >= (ps.ethan || 0) ? 'nara' : 'ethan';
+      const mvpId = (ps[TEAM_A_IDS[0]] || 0) >= (ps[TEAM_A_IDS[1]] || 0) ? TEAM_A_IDS[0] : TEAM_A_IDS[1];
       const mvpPts = ps[mvpId] || 0;
       if (mvpPts > 0) return [`MVP: ${CHARS[mvpId].name}`, `${mvpPts} PTS`, '⭐'];
       return null;
@@ -1796,10 +2035,30 @@ canvas.addEventListener('touchstart', e => {
         if (x >= 158 && x < 230) { S._difficulty = 'normal'; continue; }
         if (x >= 230 && x < 305) { S._difficulty = 'hard';   continue; }
       }
-      S.screen = 'playing'; return;
+      S._charSelectStep = 1; S.screen = 'charselect'; return;
+    }
+    if (S.screen === 'charselect') {
+      const _all = ['nara','ethan','brendan','james'];
+      const _CX  = [50, 148, 246, 344];
+      // PLAY button (visible once both chosen)
+      if (S._selectedPlayer && S._selectedTeammate && y >= GH - 39 && y <= GH - 11 && Math.abs(x - GW/2) <= 55) {
+        startGameWithSelection(); return;
+      }
+      for (let _i = 0; _i < 4; _i++) {
+        if (Math.abs(x - _CX[_i]) <= 48 && y >= 140 && y <= 405) {
+          const _id = _all[_i];
+          if ((S._charSelectStep || 1) === 1) {
+            S._selectedPlayer = _id; S._selectedTeammate = null; S._charSelectStep = 2;
+          } else if (_id !== S._selectedPlayer) {
+            S._selectedTeammate = _id; startGameWithSelection();
+          }
+          return;
+        }
+      }
+      return;
     }
     if (S.screen === 'gameover') {
-      initState(); S.screen = 'playing'; return;
+      initState(); S._charSelectStep = 1; S.screen = 'charselect'; return;
     }
     if (S.screen !== 'playing') return;
 
@@ -1829,7 +2088,7 @@ canvas.addEventListener('touchstart', e => {
 
     // Defense: tap near teammate to switch control
     if (S.possession === 'b') {
-      const tmId = S.activeHuman === 'nara' ? 'ethan' : 'nara';
+      const tmId = TEAM_A_IDS.find(id => id !== S.activeHuman);
       const tm = S.players[tmId];
       if (Math.hypot(x - tm.x, y - tm.y) < 55) {
         S.activeHuman = tmId;
@@ -1883,7 +2142,13 @@ window.addEventListener('keydown', e => {
   if (S.screen === 'title' || S.screen === 'gameover') {
     if (e.code === 'Space' || e.code === 'Enter') {
       if (S.screen === 'gameover') initState();
-      S.screen = 'playing';
+      S._charSelectStep = 1; S.screen = 'charselect';
+    }
+    return;
+  }
+  if (S.screen === 'charselect') {
+    if (e.code === 'Space' || e.code === 'Enter') {
+      if (S._selectedPlayer && S._selectedTeammate) startGameWithSelection();
     }
     return;
   }
@@ -1957,7 +2222,26 @@ canvas.addEventListener('mousedown', e => {
   if (S.showInfo) { S.showInfo = false; return; }
   if (S.screen === 'title' || S.screen === 'gameover') {
     if (S.screen === 'gameover') initState();
-    S.screen = 'playing'; return;
+    S._charSelectStep = 1; S.screen = 'charselect'; return;
+  }
+  if (S.screen === 'charselect') {
+    const _all = ['nara','ethan','brendan','james'];
+    const _CX  = [50, 148, 246, 344];
+    if (S._selectedPlayer && S._selectedTeammate && y >= GH - 39 && y <= GH - 11 && Math.abs(x - GW/2) <= 55) {
+      startGameWithSelection(); return;
+    }
+    for (let _i = 0; _i < 4; _i++) {
+      if (Math.abs(x - _CX[_i]) <= 48 && y >= 140 && y <= 405) {
+        const _id = _all[_i];
+        if ((S._charSelectStep || 1) === 1) {
+          S._selectedPlayer = _id; S._selectedTeammate = null; S._charSelectStep = 2;
+        } else if (_id !== S._selectedPlayer) {
+          S._selectedTeammate = _id; startGameWithSelection();
+        }
+        return;
+      }
+    }
+    return;
   }
   if (S.screen !== 'playing') return;
   const dShoot = Math.hypot(x - 300, y - 640);
@@ -2098,7 +2382,7 @@ function releaseShoot() {
   const wideOpen = closestDef > 85;
   const contested = closestDef < 38;
   // Brendan's PAINT BEAST: extra contest penalty in the paint
-  const brendanClose = Math.hypot(S.players.brendan.x - ap.x, S.players.brendan.y - ap.y) < 42;
+  const brendanClose = Math.hypot(S.players[TEAM_B_IDS[0]].x - ap.x, S.players[TEAM_B_IDS[0]].y - ap.y) < 42;
   const paintBeastPenalty = brendanClose && dist < SHOT_RANGE_2 && CHARS.brendan._paintBlock ? 0.06 : 0;
   if (wideOpen && dist > SHOT_RANGE_LAY) {
     acc = Math.min(acc + 0.06, 0.99);
@@ -2256,7 +2540,7 @@ function handlePassAction() {
   if (S.possession !== 'a') return;
   const ap = S.players[S.activeHuman];
   if (!ap.hasBall) return;
-  const teammate = S.activeHuman === 'nara' ? 'ethan' : 'nara';
+  const teammate = TEAM_A_IDS.find(id => id !== S.activeHuman);
   const tp = S.players[teammate];
 
   ap.hasBall = false;
@@ -2304,7 +2588,7 @@ function handlePassAction() {
   S.switchFlash = { name: CHARS[teammate].name, color: CHARS[teammate].hue, ttl: 70 };
 
   // Team chemistry: Nara↔Ethan passes build chemistry
-  if ((ap.id === 'nara' || ap.id === 'ethan') && !isAlleyOop) {
+  if (TEAM_A_IDS.includes(ap.id) && !isAlleyOop) {
     S._teamChemistry = (S._teamChemistry || 0) + 1;
     if (S._teamChemistry >= 3) {
       S._teamChemistry = 0;
@@ -2454,7 +2738,7 @@ function updateBall() {
         S.scoreFlash = { text: '🙌 ALLEY-OOP!', color: CHARS[aloopId].hue, ttl: 90 };
         spawnThought(aloopId, '💥 DUNK!');
         sfxAlleyOop();
-        spawnCrowdBurst([CHARS.nara.hue, CHARS.ethan.hue, '#FFD700', '#FF8C00', '#FFF']);
+        spawnCrowdBurst([CHARS[TEAM_A_IDS[0]].hue, CHARS[TEAM_A_IDS[1]].hue, '#FFD700', '#FF8C00', '#FFF']);
         if (navigator.vibrate) navigator.vibrate([30, 20, 60]);
         return;
       }
@@ -2547,7 +2831,7 @@ function updateBall() {
       sfxMiss();
       // CPU reacts to air ball
       const taunt = ['😂 AIR BALL!', '💨 BRICKS!', '😏 AIR!'][Math.floor(Math.random()*3)];
-      setTimeout(() => spawnThought('brendan', taunt), 400);
+      setTimeout(() => spawnThought(TEAM_B_IDS[0], taunt), 400);
     }
     turnoverToCPU();
   }
@@ -2562,7 +2846,7 @@ function scorePoint() {
   const prevDeficit = S.score[1] - S.score[0]; // how far human was behind before this
   S.score[team === 'a' ? 0 : 1] += pts;
 
-  const scorer = team === 'a' ? S.activeHuman : TEAM_B_IDS.find(id => S.players[id].hasBall) || 'brendan';
+  const scorer = team === 'a' ? S.activeHuman : TEAM_B_IDS.find(id => S.players[id].hasBall) || TEAM_B_IDS[0];
   spawnThought(scorer, CHARS[scorer].quips[Math.floor(Math.random() * 4)]);
 
   // Character signature celebrations
@@ -2570,27 +2854,25 @@ function scorePoint() {
     const notes = ['♪','♩','♫','🎸'];
     for (let ni = 0; ni < 5; ni++) {
       S.thoughts.push({
-        x: S.players.nara.x + (Math.random()-0.5)*40,
-        y: S.players.nara.y - 60 - Math.random()*60,
+        x: S.players[scorer].x + (Math.random()-0.5)*40,
+        y: S.players[scorer].y - 60 - Math.random()*60,
         text: notes[ni % notes.length],
         ttl: 40 + Math.random()*25,
         maxTtl: 65,
         dx: (Math.random()-0.5)*1.5,
       });
     }
-  } else if (scorer === 'brendan' && dist < SHOT_RANGE_LAY) {
-    // Brendan dunk: drum beat particles (orange/red bursts)
+  } else if (scorer === TEAM_B_IDS[0] && dist < SHOT_RANGE_LAY) {
     for (let di = 0; di < 8; di++) {
       const ang = (di / 8) * Math.PI * 2;
-      S.confetti.push({ x: S.players.brendan.x, y: S.players.brendan.y - 40, vx: Math.cos(ang) * 4, vy: Math.sin(ang) * 4 - 3, color: di % 2 === 0 ? '#FF6B35' : '#FFD700', size: 4, ttl: 22, rot: 0, dRot: 0.3 });
+      S.confetti.push({ x: S.players[TEAM_B_IDS[0]].x, y: S.players[TEAM_B_IDS[0]].y - 40, vx: Math.cos(ang) * 4, vy: Math.sin(ang) * 4 - 3, color: di % 2 === 0 ? '#FF6B35' : '#FFD700', size: 4, ttl: 22, rot: 0, dRot: 0.3 });
     }
-  } else if (scorer === 'james' && pts === 3) {
-    // James 3pt: keyboard keys floating up (purple/white)
+  } else if (scorer === TEAM_B_IDS[1] && pts === 3) {
     const keys = ['♩', '🎹', '♪', '💜'];
     for (let ki = 0; ki < 4; ki++) {
       S.thoughts.push({
-        x: S.players.james.x + (ki - 2) * 14,
-        y: S.players.james.y - 50 - Math.random()*30,
+        x: S.players[TEAM_B_IDS[1]].x + (ki - 2) * 14,
+        y: S.players[TEAM_B_IDS[1]].y - 50 - Math.random()*30,
         text: keys[ki], ttl: 35, maxTtl: 35, dx: (ki - 1.5) * 0.4,
       });
     }
@@ -2626,8 +2908,8 @@ function scorePoint() {
   // Crowd burst particles on big plays
   if (pts === 3 || isBuzzer) {
     const burstColors = team === 'a'
-      ? [CHARS.nara.hue, CHARS.ethan.hue, '#FFD700', '#FFF']
-      : [CHARS.brendan.hue, '#FF4444', '#FFF'];
+      ? [CHARS[TEAM_A_IDS[0]].hue, CHARS[TEAM_A_IDS[1]].hue, '#FFD700', '#FFF']
+      : [CHARS[TEAM_B_IDS[0]].hue, '#FF4444', '#FFF'];
     spawnCrowdBurst(burstColors);
   }
   S.hoopFlash = 25;
@@ -2770,7 +3052,7 @@ function scorePoint() {
   }
 
   // Spawn confetti burst
-  const colors = team === 'a' ? [CHARS.nara.hue, CHARS.ethan.hue, '#FFD700', '#FFF'] : [CHARS.brendan.hue, CHARS.james.hue, '#FFD700', '#FFF'];
+  const colors = team === 'a' ? [CHARS[TEAM_A_IDS[0]].hue, CHARS[TEAM_A_IDS[1]].hue, '#FFD700', '#FFF'] : [CHARS[TEAM_B_IDS[0]].hue, CHARS[TEAM_B_IDS[1]].hue, '#FFD700', '#FFF'];
   for (let i = 0; i < 40; i++) {
     S.confetti.push({
       x: HOOP_X + (Math.random() - 0.5) * 30,
@@ -2820,7 +3102,7 @@ function scorePoint() {
       if (S.screen === 'playing') {
         S.paused = true;
         S.scoreFlash = { text: '⏸ CPU TIMEOUT', color: CHARS.brendan.hue, ttl: 180 };
-        spawnThought('brendan', '🧠 REGROUP!');
+        spawnThought(TEAM_B_IDS[0], '🧠 REGROUP!');
         setTimeout(() => { S.paused = false; }, 2200);
       }
     }, 800);
@@ -2843,17 +3125,14 @@ function scorePoint() {
       S.shake = 22;
       // Mega confetti burst
       for (let ci = 0; ci < 90; ci++) {
-        S.confetti.push({ x: Math.random() * GW, y: GH * 0.25 + Math.random() * GH * 0.45, vx: (Math.random()-0.5)*11, vy: -Math.random()*13 - 4, color: ['#FFD700','#FF69B4',CHARS.nara.hue,'#FFF','#00CFFF','#32CD32'][ci % 6], size: 5 + Math.random()*7, ttl: 100 + Math.random()*60, rot: Math.random()*Math.PI*2, dRot: (Math.random()-0.5)*0.4 });
+        S.confetti.push({ x: Math.random() * GW, y: GH * 0.25 + Math.random() * GH * 0.45, vx: (Math.random()-0.5)*11, vy: -Math.random()*13 - 4, color: ['#FFD700','#FF69B4',CHARS[TEAM_A_IDS[0]].hue,'#FFF','#00CFFF',CHARS[TEAM_A_IDS[1]].hue][ci % 6], size: 5 + Math.random()*7, ttl: 100 + Math.random()*60, rot: Math.random()*Math.PI*2, dRot: (Math.random()-0.5)*0.4 });
       }
-      spawnCrowdBurst([CHARS.nara.hue, '#FFD700', '#FFF', CHARS.ethan.hue, '#FF69B4']);
+      spawnCrowdBurst([CHARS[TEAM_A_IDS[0]].hue, '#FFD700', '#FFF', CHARS[TEAM_A_IDS[1]].hue, '#FF69B4']);
     }
     // Scorer-specific game-winner callout
-    if (aWins && scorer === 'nara') {
-      setTimeout(() => sfxGuitarStrum(), 250);
-      setTimeout(() => sfxGuitarStrum(), 600);
-      spawnThought('nara', '🎸 GAME WINNER!');
-    } else if (aWins && scorer === 'ethan') {
-      spawnThought('ethan', '🙌 ETHAN WINS IT!');
+    if (aWins) {
+      if (scorer === 'nara') { setTimeout(() => sfxGuitarStrum(), 250); setTimeout(() => sfxGuitarStrum(), 600); }
+      spawnThought(scorer, scorer === 'nara' ? '🎸 GAME WINNER!' : `🏆 ${CHARS[scorer].name} WINS IT!`);
     }
     setTimeout(() => {
       S.screen = 'gameover';
@@ -2880,7 +3159,7 @@ function scorePoint() {
 
 function resetBallAfterScore(nextPossession) {
   S.possession = nextPossession;
-  const carrier = nextPossession === 'a' ? 'nara' : 'brendan';
+  const carrier = nextPossession === 'a' ? S.activeHuman : TEAM_B_IDS[0];
   S.shotClock = 600;
 
   // Reset hold state
@@ -2916,11 +3195,11 @@ function resetBallAfterScore(nextPossession) {
   }
 
   if (nextPossession === 'a') {
-    S.players.nara.x = 80;    S.players.ethan.x   = 150;
-    S.players.brendan.x = 230; S.players.james.x   = 300;
+    S.players[TEAM_A_IDS[0]].x = 80;  S.players[TEAM_A_IDS[1]].x = 150;
+    S.players[TEAM_B_IDS[0]].x = 230; S.players[TEAM_B_IDS[1]].x = 300;
   } else {
-    S.players.brendan.x = 80;  S.players.james.x   = 155;
-    S.players.nara.x = 240;    S.players.ethan.x   = 305;
+    S.players[TEAM_B_IDS[0]].x = 80;  S.players[TEAM_B_IDS[1]].x = 155;
+    S.players[TEAM_A_IDS[0]].x = 240; S.players[TEAM_A_IDS[1]].x = 305;
   }
 
   S.ball.inAir   = false;
@@ -2930,7 +3209,7 @@ function resetBallAfterScore(nextPossession) {
   S.ball.carrier = carrier;
   S.ball._made   = undefined;
   S.players[carrier].hasBall = true;
-  S.activeHuman = 'nara';
+  if (nextPossession === 'a') S.activeHuman = S._selectedPlayer || TEAM_A_IDS[0];
 }
 
 function turnoverToCPU() {
@@ -2939,16 +3218,15 @@ function turnoverToCPU() {
   S._fastBreak = 0;
   S.ball.inAir = false;
   S.ball.vx = 0; S.ball.vy = 0;
-  S.ball.carrier = 'brendan';
+  S.ball.carrier = TEAM_B_IDS[0];
   S.ball._pass = false; S.ball._alleyOop = false; S.ball._passTarget = null;
   S.ball._fromX = undefined;
-  S.players.brendan.hasBall = true;
-  S.players.nara.hasBall = false;
-  S.players.ethan.hasBall = false;
+  S.players[TEAM_B_IDS[0]].hasBall = true;
+  for (const _id of TEAM_A_IDS) S.players[_id].hasBall = false;
   S.ball._made = undefined;
   S.shootHeld = false; S.shootPower = 0;
-  S.players.brendan._givingAndGoing = false;
-  S.players.james._postUp = false;
+  S.players[TEAM_B_IDS[0]]._givingAndGoing = false;
+  S.players[TEAM_B_IDS[1]]._postUp = false;
 }
 
 // ── Player Movement Update ────────────────────────────────────────
@@ -2992,7 +3270,7 @@ function updatePlayers() {
 
     // Alley-oop opportunity hint during fast break
     if (S._fastBreak > 80 && ap.hasBall && S.frame % 90 === 0) {
-      const tmId = S.activeHuman === 'nara' ? 'ethan' : 'nara';
+      const tmId = TEAM_A_IDS.find(id => id !== S.activeHuman);
       const tm = S.players[tmId];
       const tmNearBasket = tm.x > HOOP_X - 65;
       const defFar = TEAM_B_IDS.every(id => Math.hypot(S.players[id].x - tm.x, S.players[id].y - tm.y) > 60);
@@ -3079,7 +3357,7 @@ function updatePlayers() {
     }
 
     // Teammate movement: post-pass cut or spacing
-    const teammate = S.activeHuman === 'nara' ? 'ethan' : 'nara';
+    const teammate = TEAM_A_IDS.find(id => id !== S.activeHuman);
     const tp = S.players[teammate];
 
     // Cancel cut once player gets the ball back
@@ -3157,7 +3435,7 @@ function updatePlayers() {
     ap.y = Math.max(COURT_FAR_Y, Math.min(COURT_NEAR_Y, ap.y + ap.vy));
 
     // Second defender marks the non-ball CPU player
-    const teammate = S.activeHuman === 'nara' ? 'ethan' : 'nara';
+    const teammate = TEAM_A_IDS.find(id => id !== S.activeHuman);
     const tp2 = S.players[teammate];
     const cpuNoBall = TEAM_B_IDS.find(id => !S.players[id].hasBall);
     const markTarget = cpuNoBall ? S.players[cpuNoBall] : null;
@@ -3182,8 +3460,8 @@ function updatePlayers() {
 // ── AI Logic ──────────────────────────────────────────────────────
 function updateAIDefense() {
   // CPU team B defends while human has the ball
-  const brendan = S.players.brendan;
-  const james   = S.players.james;
+  const brendan = S.players[TEAM_B_IDS[0]];
+  const james   = S.players[TEAM_B_IDS[1]];
   const carrier = S.players[S.activeHuman];
 
   brendan.aiTimer++;
@@ -3318,11 +3596,11 @@ function updateAIDefense() {
     const success = Math.random() < stealRate;
     if (success && carrier.hasBall) {
       carrier.hasBall = false;
-      S.ball.carrier = 'brendan';
+      S.ball.carrier = TEAM_B_IDS[0];
       brendan.hasBall = true;
       S.possession = 'b';
       S.shootHeld = false; S.shootPower = 0;
-      spawnThought('brendan', '😤 STEAL!');
+      spawnThought(TEAM_B_IDS[0], '😤 STEAL!');
     }
   }
 
@@ -3333,18 +3611,18 @@ function updateAIDefense() {
     const jStealRate = S._difficulty === 'easy' ? 0.05 : S._difficulty === 'hard' ? 0.18 : 0.10;
     if (Math.random() < jStealRate) {
       carrier.hasBall = false;
-      S.ball.carrier = 'james';
+      S.ball.carrier = TEAM_B_IDS[1];
       james.hasBall = true;
       S.possession = 'b';
       S.shootHeld = false; S.shootPower = 0;
-      spawnThought('james', '🖐 STRIP!');
+      spawnThought(TEAM_B_IDS[1], '🖐 STRIP!');
     }
   }
 }
 
 function updateAI() {
-  const brendan = S.players.brendan;
-  const james   = S.players.james;
+  const brendan = S.players[TEAM_B_IDS[0]];
+  const james   = S.players[TEAM_B_IDS[1]];
 
   brendan.aiTimer++;
   james.aiTimer++;
@@ -3396,9 +3674,9 @@ function updateAI() {
         const lt = Math.max(12, Math.hypot(lpdx, lpdy) / 12);
         S.ball.vx = lpdx / lt;
         S.ball.vy = (lpdy - 0.225 * lt * lt) / lt - 4; // extra loft for lob
-        S.ball._pass = true; S.ball._passTarget = 'james'; S.ball._alleyOop = true;
-        spawnThought('james', '🙌');
-        spawnThought('brendan', '🎳 LOB!');
+        S.ball._pass = true; S.ball._passTarget = TEAM_B_IDS[1]; S.ball._alleyOop = true;
+        spawnThought(TEAM_B_IDS[1], '🙌');
+        spawnThought(TEAM_B_IDS[0], '🎳 LOB!');
       } else {
         // Normal give-and-go pass
         brendan.hasBall = false;
@@ -3409,8 +3687,8 @@ function updateAI() {
         const tPass2 = Math.max(10, Math.hypot(pdx, pdy) / 14);
         S.ball.vx = pdx / tPass2;
         S.ball.vy = (pdy - 0.225 * tPass2 * tPass2) / tPass2 - 1;
-        S.ball._pass = true; S.ball._passTarget = 'james';
-        spawnThought('james', '🏀');
+        S.ball._pass = true; S.ball._passTarget = TEAM_B_IDS[1];
+        spawnThought(TEAM_B_IDS[1], '🏀');
         brendan._givingAndGoing = true;
       }
     }
@@ -3423,7 +3701,7 @@ function updateAI() {
       const threeChance = diff === 'hard' ? 0.007 : diff === 'easy' ? 0.001 : 0.003;
       if (Math.random() < threeChance) james._goingThree = true;
       else if (Math.random() < 0.004) james._driving = true;
-      else if (diff !== 'easy' && Math.random() < 0.003) { james._postUp = true; spawnThought('james', '💪 POST!'); }
+      else if (diff !== 'easy' && Math.random() < 0.003) { james._postUp = true; spawnThought(TEAM_B_IDS[1], '💪 POST!'); }
     }
     const targetX = james._goingThree ? HOOP_X - 215 : james._driving ? HOOP_X - 25 : james._postUp ? HOOP_X - 40 : HOOP_X - 55;
     const ddx = targetX - james.x;
@@ -3440,7 +3718,7 @@ function updateAI() {
           james._faked = true;
           james.anim = 'shoot';
           james.aiTimer = 30;
-          spawnThought('james', '😏');
+          spawnThought(TEAM_B_IDS[1], '😏');
         } else {
           james._faked = false;
           james._goingThree = false;
@@ -3507,15 +3785,15 @@ function aiShoot(p) {
     setTimeout(() => {
       if (S.possession === 'b' && !S.ball.carrier) {
         S.possession = 'a';
-        S.ball.carrier = 'nara';
-        S.players.nara.hasBall = true;
-        S.players.brendan.hasBall = false;
-        S.players.james.hasBall = false;
+        const _rebounder = S.activeHuman;
+        S.ball.carrier = _rebounder;
+        S.players[_rebounder].hasBall = true;
+        for (const _id of TEAM_B_IDS) S.players[_id].hasBall = false;
         S.ball.inAir = false;
-        S.ball.x = S.players.nara.x;
+        S.ball.x = S.players[_rebounder].x;
         S.ball.y = FLOOR_Y - 30;
         S._fastBreak = 120;
-        spawnThought('nara', S._deuceActive ? '🔥 DEUCE BOARD!' : '🏀 REBOUND!');
+        spawnThought(_rebounder, S._deuceActive ? '🔥 DEUCE BOARD!' : '🏀 REBOUND!');
         if (S._deuceActive) setTimeout(() => sfxCrowd(0.5), 200);
       }
     }, 1800);
@@ -3582,6 +3860,11 @@ function loop() {
 
   if (S.screen === 'title') {
     drawTitle();
+    return;
+  }
+
+  if (S.screen === 'charselect') {
+    drawCharSelect();
     return;
   }
 
@@ -3784,7 +4067,7 @@ function loop() {
   if (S.possession === 'a' && !S.shootHeld) {
     const ap = S.players[S.activeHuman];
     if (ap.hasBall) {
-      const tmId = S.activeHuman === 'nara' ? 'ethan' : 'nara';
+      const tmId = TEAM_A_IDS.find(id => id !== S.activeHuman);
       const tm = S.players[tmId];
       const dx = tm.x - ap.x, dy = (tm.y - 20) - (ap.y - 120);
       const ang = Math.atan2(dy, dx);
@@ -3946,7 +4229,7 @@ function loop() {
   // Pass arrow + OPEN/LOBB indicator when teammate is unguarded
   if (S.possession === 'a') {
     const ap = S.players[S.activeHuman];
-    const tmId = S.activeHuman === 'nara' ? 'ethan' : 'nara';
+    const tmId = TEAM_A_IDS.find(id => id !== S.activeHuman);
     const tm = S.players[tmId];
     const closestDef = Math.min(...TEAM_B_IDS.map(id => Math.hypot(S.players[id].x - tm.x, S.players[id].y - tm.y)));
     const isOpen = closestDef > 70;
@@ -3985,7 +4268,7 @@ function loop() {
 
   // Defense: pulse indicator on inactive defender (tap to switch)
   if (S.possession === 'b') {
-    const defId = S.activeHuman === 'nara' ? 'ethan' : 'nara';
+    const defId = TEAM_A_IDS.find(id => id !== S.activeHuman);
     const defP = S.players[defId];
     const pulse = 0.25 + Math.sin(S.frame * 0.12) * 0.15;
     ctx.save();
