@@ -30,10 +30,30 @@
 
 <script>
 const CHARS = [
-  { id: 'nara',    name: 'NARA',    role: 'VOCALS', hue: '#FF1493', sprite: '../assets/nara_sprite.png',    face: [32, 0, 174, 176] },
-  { id: 'ethan',   name: 'ETHAN',   role: 'BASS',   hue: '#32CD32', sprite: '../assets/ethan_sprite.png',   face: [28, 8, 270, 305] },
-  { id: 'brendan', name: 'BRENDAN', role: 'DRUMS',  hue: '#FF6B35', sprite: '../assets/brendan_sprite.png', face: [30, 12, 258, 330] },
-  { id: 'will',    name: 'WILL',    role: 'KEYS',   hue: '#9B59B6', sprite: '../assets/will_sprite.png',    face: [34, 0, 324, 272] },
+  {
+    id: 'nara', name: 'NARA', role: 'VOCALS · GUITAR',
+    ability: '3PT SHOOTER · SPEED BOOST',
+    summary: 'Deep shot confidence with wing-assisted lift.',
+    hue: '#FF1493', sprite: '../assets/nara_sprite.png', face: [120, 0, 340, 350],
+  },
+  {
+    id: 'ethan', name: 'ETHAN', role: 'BASS',
+    ability: 'LOCKDOWN · +20% STEAL RANGE',
+    summary: 'Stretch arms for blocks, boards, and poke steals.',
+    hue: '#32CD32', sprite: '../assets/ethan_sprite.png', face: [55, 0, 265, 360],
+  },
+  {
+    id: 'brendan', name: 'BRENDAN', role: 'DRUMS',
+    ability: 'PAINT BEAST · IN THE PAINT',
+    summary: 'Controls rebounds and contests everything near the rim.',
+    hue: '#FF6B35', sprite: '../assets/brendan_sprite.png', face: [28, 0, 264, 370],
+  },
+  {
+    id: 'will', name: 'WILL', role: 'KEYS',
+    ability: 'DEEP RANGE · +8% THREE POINT',
+    summary: 'Long-range touch with a bucket-hat headbutt finish.',
+    hue: '#9B59B6', sprite: '../assets/will_sprite.png', face: [40, 0, 350, 345],
+  },
 ];
 
 const canvas = document.getElementById('cv');
@@ -93,16 +113,18 @@ function layout() {
   const dotW = Math.min(120 * dpr, W * 0.17);
   const gap = Math.max(14 * dpr, W * 0.025);
   const dotY = H - 60 * dpr;
+  const summaryY = dotY - 86 * dpr;
   return {
     dpr,
     cx: W * 0.5,
     floor,
     sideY,
-    bodyH: Math.min(H * 0.55, W * 0.72),
+    bodyH: Math.min(H * 0.50, W * 0.72),
     sideH: Math.min(H * 0.38, W * 0.2),
     leftX: W * 0.18,
     rightX: W * 0.82,
-    labelY: dotY - 62 * dpr,
+    labelY: summaryY - 58 * dpr,
+    summaryY,
     dotY,
     dotW,
     dotH: 34 * dpr,
@@ -229,6 +251,33 @@ function drawName(c, y, selectedStyle = true) {
   ctx.restore();
 }
 
+function drawSummary(c, y) {
+  const dpr = window.devicePixelRatio || 1;
+  const boxW = Math.min(W * 0.82, 560 * dpr);
+  const boxH = 58 * dpr;
+  const x = W / 2 - boxW / 2;
+  const top = y - boxH / 2;
+
+  ctx.save();
+  roundedRect(x, top, boxW, boxH, 10 * dpr);
+  ctx.fillStyle = 'rgba(0,0,0,0.48)';
+  ctx.strokeStyle = c.hue + 'AA';
+  ctx.lineWidth = 1.5 * dpr;
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = `900 ${13 * dpr}px Courier New, monospace`;
+  ctx.fillStyle = c.hue;
+  ctx.fillText(c.ability, W / 2, y - 12 * dpr, boxW - 28 * dpr);
+
+  ctx.font = `700 ${10 * dpr}px Courier New, monospace`;
+  ctx.fillStyle = 'rgba(255,255,255,0.72)';
+  ctx.fillText(c.summary, W / 2, y + 13 * dpr, boxW - 28 * dpr);
+  ctx.restore();
+}
+
 function drawDots() {
   const l = layout();
   const { dotW, dotH, gap } = l;
@@ -297,6 +346,7 @@ function drawFrame() {
   if (zoomed) {
     drawFace(c);
     drawName(c, l.labelY, true);
+    drawSummary(c, l.summaryY);
   } else {
     ctx.save();
     ctx.translate(l.cx, l.floor + 10 * l.dpr);
@@ -308,6 +358,7 @@ function drawFrame() {
     ctx.restore();
     drawSprite(c, l.cx, l.floor, l.bodyH, 1, true);
     drawName(c, l.labelY, true);
+    drawSummary(c, l.summaryY);
   }
 
   drawArrows();
