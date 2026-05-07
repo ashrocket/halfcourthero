@@ -176,14 +176,30 @@ function sfxVictoryFanfare() {
 
 function fitCanvas() {
   const lw = window.innerWidth, lh = window.innerHeight;
-  _rotated = false;
-  _scale = Math.min(lw / GW, lh / GH);
-  const cw = GW * _scale, ch = GH * _scale;
-  canvas.style.width  = cw + 'px';
-  canvas.style.height = ch + 'px';
-  canvas.style.left   = ((lw - cw) / 2) + 'px';
-  canvas.style.top    = ((lh - ch) / 2) + 'px';
-  canvas.style.transform = '';
+  const isLandscape = lw > lh;
+  if (isLandscape) {
+    _rotated = true;
+    // Scale so portrait canvas (GW×GH) fits rotated in landscape (lw×lh)
+    // After 90° CW rotation: portrait width→visual height, portrait height→visual width
+    _scale = Math.min(lh / GW, lw / GH);
+    const cw = GW * _scale, ch = GH * _scale;
+    canvas.style.width  = cw + 'px';
+    canvas.style.height = ch + 'px';
+    // Center canvas; after rotation its visual center stays at screen center
+    canvas.style.left   = (lw / 2 - cw / 2) + 'px';
+    canvas.style.top    = (lh / 2 - ch / 2) + 'px';
+    canvas.style.transformOrigin = '50% 50%';
+    canvas.style.transform = 'rotate(90deg)';
+  } else {
+    _rotated = false;
+    _scale = Math.min(lw / GW, lh / GH);
+    const cw = GW * _scale, ch = GH * _scale;
+    canvas.style.width  = cw + 'px';
+    canvas.style.height = ch + 'px';
+    canvas.style.left   = ((lw - cw) / 2) + 'px';
+    canvas.style.top    = ((lh - ch) / 2) + 'px';
+    canvas.style.transform = '';
+  }
 }
 window.addEventListener('resize', fitCanvas);
 fitCanvas();
@@ -235,11 +251,11 @@ const CHARS = {
     _3ptBonus: 0, _spd: 1.0, _stealBonus: 0, _paintBlock: true
   },
   james: {
-    name: 'JAMES', role: 'KEYS',
+    name: 'WILL', role: 'KEYS',
     skin: '#8D5524', hair: '#111', shirt: '#9B59B6',
     pants: '#2C2C2C', shoes: '#9B59B6', brow: '#111',
     hairStyle: 'glasses', hue: '#9B59B6',
-    quips: ['🎹 NICE!', '😎 EZ!', '💜 YES!', '🎯 PERFECT!'],
+    quips: ['🎹 NICE!', '😎 WILL!', '💜 YES!', '🎯 PERFECT!'],
     ability: 'DEEP RANGE', abilityEmoji: '🔭',
     _3ptBonus: 0.08, _spd: 0.95, _stealBonus: 0
   }
