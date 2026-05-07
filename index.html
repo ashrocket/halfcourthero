@@ -241,7 +241,7 @@ const CHARS = {
     quips: ['🎸 YEAH!', '💪 LOW!', '🏀 NICE!', '🔥 FIRE!'],
     // Abilities: +steal range 20%, faster defender coverage
     ability: 'LOCKDOWN', abilityEmoji: '🛡',
-    _3ptBonus: 0, _spd: 1.05, _stealBonus: 0.20
+    _3ptBonus: 0, _spd: 1.05, _stealBonus: 0.20, _h: 185
   },
   brendan: {
     name: 'BRENDAN', role: 'DRUMS',
@@ -1705,46 +1705,46 @@ function drawTitle() {
     ctx.restore();
 
     const nameX = cx;
-    fillRR(nameX - 32, 318, 64, 28, 6, 'rgba(0,0,0,0.65)', d.hue, 1.5);
+    fillRR(nameX - 39, 316, 78, 34, 7, 'rgba(0,0,0,0.65)', d.hue, 2);
     ctx.fillStyle = d.hue;
-    ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(d.name, nameX, 327);
+    ctx.font = 'bold 11px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(d.name, nameX, 328);
     ctx.fillStyle = 'rgba(255,255,255,0.55)';
-    ctx.font = '7px monospace'; ctx.letterSpacing = '0';
-    ctx.fillText(d.role.split(' ')[0], nameX, 339);
+    ctx.font = 'bold 8px monospace'; ctx.letterSpacing = '0';
+    ctx.fillText(d.role.split(' ')[0], nameX, 343);
   }
 
   // Team headers above characters
   ctx.fillStyle = CHARS.nara.hue;
-  ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center'; ctx.letterSpacing = '0';
+  ctx.font = 'bold 12px monospace'; ctx.textAlign = 'center'; ctx.letterSpacing = '0';
   ctx.fillText('YOUR TEAM', GW / 4, 268);
   ctx.fillStyle = CHARS.brendan.hue;
   ctx.fillText('CPU TEAM', (GW * 3) / 4, 268);
 
   ctx.fillStyle = 'rgba(255,255,255,0.5)';
   ctx.fillRect(GW / 2 - 1, 270, 2, 80);
-  ctx.font = 'bold 16px monospace'; ctx.textAlign = 'center';
+  ctx.font = 'bold 20px monospace'; ctx.textAlign = 'center';
   ctx.fillText('VS', GW / 2, 316);
 
   // Difficulty buttons
   const diff = S._difficulty || 'normal';
   const diffBtns = [['easy','EASY','#32CD32'],['normal','NORMAL','#FFD700'],['hard','HARD','#FF4444']];
-  let bx = GW / 2 - 105;
+  let bx = GW / 2 - 126;
   for (const [key, label, color] of diffBtns) {
     const sel = diff === key;
-    fillRR(bx, 410, 64, 24, 8, sel ? color : 'rgba(0,0,0,0.4)', sel ? '#FFF' : color, sel ? 2 : 1.5);
+    fillRR(bx, 406, 76, 34, 10, sel ? color : 'rgba(0,0,0,0.4)', sel ? '#FFF' : color, sel ? 2.5 : 2);
     ctx.fillStyle = sel ? '#111' : color;
-    ctx.font = (sel ? 'bold ' : '') + '10px monospace';
+    ctx.font = (sel ? 'bold ' : '') + '13px monospace';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.letterSpacing = '0';
-    ctx.fillText(label, bx + 32, 422);
-    bx += 72;
+    ctx.fillText(label, bx + 38, 423);
+    bx += 88;
   }
 
   // Career wins from localStorage
   let titleBest = {};
   try { titleBest = JSON.parse(localStorage.getItem('hch_best') || '{}'); } catch(e) {}
   if (titleBest.wins > 0 || titleBest.losses > 0) {
-    ctx.fillStyle = '#FFD700'; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center'; ctx.letterSpacing = '0';
+    ctx.fillStyle = '#FFD700'; ctx.font = 'bold 11px monospace'; ctx.textAlign = 'center'; ctx.letterSpacing = '0';
     const wl = `${titleBest.wins || 0}W - ${titleBest.losses || 0}L`;
     const extras = [];
     if (titleBest.deuceWins > 0) extras.push(`⚖️×${titleBest.deuceWins}`);
@@ -1768,21 +1768,21 @@ function drawTitle() {
 
   const tapAlpha = 0.5 + Math.sin(S.frame * 0.07) * 0.4;
   ctx.fillStyle = `rgba(255,255,255,${tapAlpha})`;
-  ctx.font = 'bold 14px monospace'; ctx.textAlign = 'center';
-  ctx.letterSpacing = '0.25em';
+  ctx.font = 'bold 20px monospace'; ctx.textAlign = 'center';
+  ctx.letterSpacing = '0.18em';
   const tapY = titleBest.wins > 0 ? 470 : 465;
   ctx.fillText('TAP TO PLAY', GW / 2, tapY);
 
   // MEET THE BAND button
-  const btnY = tapY + 25;
-  fillRR(GW / 2 - 60, btnY, 120, 26, 8, 'rgba(0,0,0,0.4)', '#FFD700', 1.5);
+  const btnY = tapY + 35;
+  fillRR(GW / 2 - 82, btnY, 164, 36, 10, 'rgba(0,0,0,0.4)', '#FFD700', 2);
   ctx.fillStyle = '#FFD700';
-  ctx.font = 'bold 10px monospace';
-  ctx.letterSpacing = '0.1em';
-  ctx.fillText('MEET THE BAND', GW / 2, btnY + 14);
+  ctx.font = 'bold 13px monospace';
+  ctx.letterSpacing = '0.08em';
+  ctx.fillText('MEET THE BAND', GW / 2, btnY + 19);
 
-  ctx.fillStyle = 'rgba(255,255,255,0.2)';
-  ctx.font = '9px monospace'; ctx.letterSpacing = '0.15em';
+  ctx.fillStyle = 'rgba(255,255,255,0.3)';
+  ctx.font = 'bold 11px monospace'; ctx.letterSpacing = '0.12em';
   ctx.fillText('BANDMUSICGAMES.PARTY', GW / 2, GH - 20);
 }
 
@@ -1801,15 +1801,15 @@ function drawCharSelect() {
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   if (step === 1) {
     ctx.fillStyle = '#FFD700';
-    ctx.font = 'bold 13px monospace'; ctx.letterSpacing = '0.2em';
+    ctx.font = 'bold 18px monospace'; ctx.letterSpacing = '0.12em';
     ctx.fillText('PICK YOUR PLAYER', 0, 0);
   } else {
     ctx.fillStyle = CHARS[chosen].hue;
-    ctx.font = 'bold 11px monospace'; ctx.letterSpacing = '0.15em';
-    ctx.fillText(CHARS[chosen].name + '  ✓', 0, -11);
+    ctx.font = 'bold 14px monospace'; ctx.letterSpacing = '0.1em';
+    ctx.fillText(CHARS[chosen].name + '  ✓', 0, -13);
     ctx.fillStyle = '#FFD700';
-    ctx.font = 'bold 12px monospace'; ctx.letterSpacing = '0.2em';
-    ctx.fillText('PICK TEAMMATE', 0, 7);
+    ctx.font = 'bold 16px monospace'; ctx.letterSpacing = '0.12em';
+    ctx.fillText('PICK TEAMMATE', 0, 8);
   }
   ctx.restore();
 
@@ -1835,22 +1835,22 @@ function drawCharSelect() {
     ctx.restore();
 
     const isSel = isChosen || isTm;
-    fillRR(cx - 32, CY + 8, 64, 52, 6,
+    fillRR(cx - 39, CY + 8, 78, 58, 7,
       isSel ? d.hue : (isGrayed ? 'rgba(40,30,70,0.5)' : 'rgba(0,0,0,0.65)'),
       isSel ? '#FFF' : d.hue, isSel ? 2 : 1);
     ctx.fillStyle = isSel ? '#111' : (isGrayed ? 'rgba(255,255,255,0.3)' : d.hue);
-    ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = 'bold 11px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.letterSpacing = '0';
     ctx.fillText(d.name, cx, CY + 20);
     ctx.fillStyle = isSel ? '#222' : 'rgba(255,255,255,0.5)';
-    ctx.font = '7px monospace';
-    ctx.fillText((d.abilityEmoji || '') + ' ' + (d.ability || '').split(' ')[0], cx, CY + 31);
+    ctx.font = 'bold 8px monospace';
+    ctx.fillText((d.abilityEmoji || '') + ' ' + (d.ability || '').split(' ')[0], cx, CY + 34);
     if (isChosen) {
-      ctx.fillStyle = '#111'; ctx.font = 'bold 8px monospace';
-      ctx.fillText('YOU', cx, CY + 44);
+      ctx.fillStyle = '#111'; ctx.font = 'bold 9px monospace';
+      ctx.fillText('YOU', cx, CY + 49);
     } else if (isTm) {
-      ctx.fillStyle = '#111'; ctx.font = 'bold 7px monospace';
-      ctx.fillText('TEAMMATE', cx, CY + 44);
+      ctx.fillStyle = '#111'; ctx.font = 'bold 8px monospace';
+      ctx.fillText('TEAMMATE', cx, CY + 49);
     }
   }
 
@@ -1859,7 +1859,7 @@ function drawCharSelect() {
     ctx.fillStyle = 'rgba(255,255,255,0.35)';
     ctx.fillRect(GW / 2 - 1, 150, 2, 200);
     ctx.fillStyle = 'rgba(255,255,255,0.25)';
-    ctx.font = '8px monospace'; ctx.textAlign = 'center'; ctx.letterSpacing = '0';
+    ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center'; ctx.letterSpacing = '0';
     ctx.fillText('YOUR TEAM', GW / 4, 148);
     ctx.fillText('CPU TEAM', GW * 3 / 4, 148);
   }
@@ -1867,15 +1867,15 @@ function drawCharSelect() {
   // Tap hint
   const tapAlpha = 0.5 + Math.sin(S.frame * 0.07) * 0.35;
   ctx.fillStyle = `rgba(255,255,255,${tapAlpha * 0.65})`;
-  ctx.font = '9px monospace'; ctx.textAlign = 'center'; ctx.letterSpacing = '0.1em';
+  ctx.font = 'bold 13px monospace'; ctx.textAlign = 'center'; ctx.letterSpacing = '0.08em';
   ctx.fillText(step === 1 ? 'TAP A PLAYER' : 'TAP TEAMMATE', GW / 2, GH - 55);
 
   // PLAY button once both selected
   if (chosen && teammate) {
-    fillRR(GW / 2 - 58, GH - 38, 116, 28, 8, '#FFD700', '#FFF', 2);
-    ctx.fillStyle = '#111'; ctx.font = 'bold 13px monospace';
+    fillRR(GW / 2 - 74, GH - 44, 148, 36, 10, '#FFD700', '#FFF', 2.5);
+    ctx.fillStyle = '#111'; ctx.font = 'bold 15px monospace';
     ctx.textAlign = 'center'; ctx.letterSpacing = '0.15em'; ctx.textBaseline = 'middle';
-    ctx.fillText('▶  PLAY!', GW / 2, GH - 24);
+    ctx.fillText('▶  PLAY!', GW / 2, GH - 26);
   }
 }
 
@@ -2086,19 +2086,19 @@ canvas.addEventListener('touchstart', e => {
     if (S.showInfo) { S.showInfo = false; continue; }
 
     if (S.screen === 'title') {
-      // MEET THE BAND button: GW/2-60, btnY, 120, 26. btnY = tapY + 25. tapY = 470 or 465.
+      // MEET THE BAND button
       const tapY = (JSON.parse(localStorage.getItem('halfcourt_stats') || '{}').wins || 0) > 0 ? 470 : 465;
-      const btnY = tapY + 25;
-      if (x >= GW/2 - 60 && x <= GW/2 + 60 && y >= btnY && y <= btnY + 26) {
+      const btnY = tapY + 35;
+      if (x >= GW/2 - 82 && x <= GW/2 + 82 && y >= btnY && y <= btnY + 36) {
         window.location.href = './characters/';
         return;
       }
       
-      // Difficulty buttons: drawn at bx=90, bx=162, bx=234 each 64px wide
-      if (y >= 405 && y <= 440) {
-        if (x >= 85  && x < 158) { S._difficulty = 'easy';   continue; }
-        if (x >= 158 && x < 230) { S._difficulty = 'normal'; continue; }
-        if (x >= 230 && x < 305) { S._difficulty = 'hard';   continue; }
+      // Difficulty buttons
+      if (y >= 402 && y <= 446) {
+        if (x >= 70  && x < 156) { S._difficulty = 'easy';   continue; }
+        if (x >= 156 && x < 244) { S._difficulty = 'normal'; continue; }
+        if (x >= 244 && x < 330) { S._difficulty = 'hard';   continue; }
       }
       S._charSelectStep = 1; S.screen = 'charselect'; return;
     }
@@ -2106,7 +2106,7 @@ canvas.addEventListener('touchstart', e => {
       const _all = ['nara','ethan','brendan','will'];
       const _CX  = [50, 148, 246, 344];
       // PLAY button (visible once both chosen)
-      if (S._selectedPlayer && S._selectedTeammate && y >= GH - 39 && y <= GH - 11 && Math.abs(x - GW/2) <= 55) {
+      if (S._selectedPlayer && S._selectedTeammate && y >= GH - 46 && y <= GH - 6 && Math.abs(x - GW/2) <= 76) {
         startGameWithSelection(); return;
       }
       for (let _i = 0; _i < 4; _i++) {
