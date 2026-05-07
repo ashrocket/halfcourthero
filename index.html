@@ -2055,7 +2055,21 @@ function releaseShoot() {
     } else if (isDunk) {
       acc = 0.97; timingText = '💥 DUNK!';
     } else {
-      acc = Math.min(acc + 0.24, 0.96); if (timingText !== '⬆ EARLY') timingText = '🏃 LAYUP!';
+      // Euro Step: driving hard AND moving laterally (around defender)
+      const defInLane = TEAM_B_IDS.some(id => S.players[id].x > HOOP_X - 80 && Math.abs(S.players[id].y - ap.y) < 55);
+      const isEuroStep = Math.abs(ap.vx) > 2.2 && Math.abs(ap.vy) > 0.9 && defInLane;
+      acc = Math.min(acc + 0.24, 0.96);
+      if (isEuroStep) {
+        acc = Math.min(acc + 0.06, 0.98);
+        timingText = '🪄 EURO STEP!';
+        S._possessionMoves = (S._possessionMoves || 0) + 1;
+        // Sparkle at feet
+        for (let ei = 0; ei < 5; ei++) {
+          S.confetti.push({ x: ap.x + (Math.random()-0.5)*20, y: ap.y, vx: (Math.random()-0.5)*3, vy: -1.5-Math.random()*2, color: '#A0FFD0', size: 3+Math.random()*2, ttl: 14, rot: 0, dRot: 0.3 });
+        }
+      } else if (timingText !== '⬆ EARLY') {
+        timingText = '🏃 LAYUP!';
+      }
     }
   }
 
@@ -2609,7 +2623,17 @@ function scorePoint() {
     if (S._hotSpots.length > 8) S._hotSpots.shift(); // keep last 8
   }
   if (team === 'a') S._coldStreak = 0; // reset cold streak on score
-  if (team === 'a' && (S._cpuStreak || 0) >= 3) S._stoppedRun = true;
+  const brokenRun = team === 'a' && (S._cpuStreak || 0) >= 3;
+  if (brokenRun) {
+    S._stoppedRun = true;
+    setTimeout(() => {
+      if (S.screen === 'playing') {
+        S.scoreFlash = { text: '🛑 RUN STOPPER!', color: '#00FF88', ttl: 90 };
+        sfxCrowd(0.9);
+        spawnCrowdBurst([CHARS.nara.hue, '#00FF88', '#FFD700', '#FFF']);
+      }
+    }, 1100);
+  }
   if (team === 'a') S._cpuStreak = 0;  // break CPU run
   if (team === 'a') {
     S._playerScores = S._playerScores || { nara: 0, ethan: 0 };
