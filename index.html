@@ -122,6 +122,15 @@ function sfxCrowd(intensity) {
   } catch(e) {}
 }
 
+function sfxGuitarStrum() {
+  // Nara's signature guitar strum on big shots
+  const freqs = [329, 415, 523, 659, 784, 988];
+  freqs.forEach((f, i) => {
+    setTimeout(() => playTone(f, 0.25, 'sawtooth', 0.08), i * 28);
+  });
+  setTimeout(() => playTone(523, 0.4, 'sine', 0.10), 180);
+}
+
 function sfxDeuceTension() {
   // Low sustained drone that plays once when deuce activates
   try {
@@ -302,7 +311,9 @@ function initState() {
     _humanTimeouts: 1,
     _possessionMoves: 0,
     _perfectFlash: null,
-    _playerScores: { nara: 0, ethan: 0 }, // per-player scoring for MVP
+    _playerScores: { nara: 0, ethan: 0 },
+    _coldStreak: 0,
+    _teamChemistry: 0, // consecutive passes between Nara and Ethan
     scored: false,
     showInfo: false,
     switchFlash: null,
@@ -1096,17 +1107,22 @@ function drawHUD() {
   if (S.screen === 'playing') {
     const secs = Math.ceil(S.shotClock / 60);
     const urgent = secs <= 3;
+    const warning = secs <= 5;
     if (urgent && S.possession === 'a') {
-      const pulse = 0.25 + Math.sin(S.frame * 0.5) * 0.18;
+      const pulse = 0.3 + Math.sin(S.frame * 0.6) * 0.22;
       ctx.save();
       ctx.fillStyle = `rgba(255,40,40,${pulse})`;
-      ctx.fillRect(GW / 2 - 20, 33, 40, 16);
+      ctx.fillRect(GW / 2 - 22, 32, 44, 18);
       ctx.restore();
     }
-    ctx.font = `bold 11px monospace`; ctx.letterSpacing = '0';
-    ctx.fillStyle = urgent && S.possession === 'a' ? '#FF4444' : 'rgba(255,255,255,0.45)';
+    ctx.font = `bold ${urgent ? '13' : '11'}px monospace`; ctx.letterSpacing = '0';
+    ctx.fillStyle = urgent && S.possession === 'a' ? '#FF2222' : warning && S.possession === 'a' ? '#FF9900' : 'rgba(255,255,255,0.45)';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(secs + 's', GW / 2, 44);
+    // Big countdown pop when each second ticks
+    if (S.possession === 'a' && S.shotClock % 60 === 59 && secs <= 4 && secs > 0) {
+      S.thoughts.push({ x: GW / 2, y: 200, text: `⏰ ${secs}!`, ttl: 35, maxTtl: 35, dx: 0, bg: '#FF2222CC' });
+    }
   }
 
   // ON FIRE / fast break banners
@@ -2040,6 +2056,18 @@ function handlePassAction() {
   S.activeHuman = teammate;
   spawnThought(teammate, isAlleyOop ? '🙌' : '🏀');
   S.switchFlash = { name: CHARS[teammate].name, color: CHARS[teammate].hue, ttl: 70 };
+
+  // Team chemistry: Nara↔Ethan passes build chemistry
+  if ((ap.id === 'nara' || ap.id === 'ethan') && !isAlleyOop) {
+    S._teamChemistry = (S._teamChemistry || 0) + 1;
+    if (S._teamChemistry >= 3) {
+      S._teamChemistry = 0;
+      S.scoreFlash = { text: '✨ TEAM CHEMISTRY!', color: '#FF69B4', ttl: 70 };
+      // Both players get brief speed boost (via _fastBreak proxy)
+      S._fastBreak = Math.max(S._fastBreak, 80);
+      sfxCrowd(0.4);
+    }
+  }
 }
 
 function handleStealAction() {
@@ -2224,6 +2252,14 @@ function updateBall() {
           .map(id => ({ id, dist: Math.hypot(S.players[id].x - b.x, S.players[id].y - b.y) }))
           .sort((a, c) => a.dist - c.dist);
         const closest = all[0];
+        // If human missed, track cold streak
+        if (S.possession === 'a' && !b._made && b._fromX !== undefined) {
+          S._coldStreak = (S._coldStreak || 0) + 1;
+          if (S._coldStreak >= 3) {
+            spawnThought(S.activeHuman, '🥶 COLD!');
+            S._coldStreak = 0;
+          }
+        }
         if (TEAM_A_IDS.includes(closest.id) && closest.dist < 120) {
           S.possession = 'a';
           S.ball.carrier = closest.id;
@@ -2239,7 +2275,13 @@ function updateBall() {
   }
 
   if (b.x < -30) {
-    if (S.possession === 'a') spawnThought(S.activeHuman, '😬 AIR BALL!');
+    if (S.possession === 'a') {
+      spawnThought(S.activeHuman, '😬 AIR BALL!');
+      sfxMiss();
+      // CPU reacts to air ball
+      const taunt = ['😂 AIR BALL!', '💨 BRICKS!', '😏 AIR!'][Math.floor(Math.random()*3)];
+      setTimeout(() => spawnThought('brendan', taunt), 400);
+    }
     turnoverToCPU();
   }
 }
@@ -2308,6 +2350,7 @@ function scorePoint() {
   S.hoopFlash = 25;
   if (navigator.vibrate) navigator.vibrate(isBuzzer ? [80, 40, 80] : pts === 3 ? [30, 20, 50] : 45);
   if (team === 'a') S.stats.made++;
+  if (team === 'a') S._coldStreak = 0; // reset cold streak on score
   if (team === 'a') {
     S._playerScores = S._playerScores || { nara: 0, ethan: 0 };
     S._playerScores[scorer] = (S._playerScores[scorer] || 0) + pts;
@@ -2316,6 +2359,8 @@ function scorePoint() {
   if (team === 'a' && pts === 3) {
     S.stats.threes++;
     S._human3ptStreak = (S._human3ptStreak || 0) + 1;
+    // Nara's signature guitar strum on 3pt
+    if (scorer === 'nara') setTimeout(() => sfxGuitarStrum(), 300);
     // CHEF CURRY: 3 3s in a row = special bonus mode
     if (S._human3ptStreak === 3) {
       setTimeout(() => { S.scoreFlash = { text: '🍳 CHEF CURRY MODE!', color: '#FFD700', ttl: 100 }; }, 1000);
@@ -2606,6 +2651,15 @@ function updatePlayers() {
     const isDoubleTeamed = bothDefs.length >= 2 && ap.hasBall;
     if (isDoubleTeamed && S.frame % 90 === 0) spawnThought(ap.id, '🔥 DOUBLE TEAM!');
 
+    // Alley-oop opportunity hint during fast break
+    if (S._fastBreak > 80 && ap.hasBall && S.frame % 90 === 0) {
+      const tmId = S.activeHuman === 'nara' ? 'ethan' : 'nara';
+      const tm = S.players[tmId];
+      const tmNearBasket = tm.x > HOOP_X - 65;
+      const defFar = TEAM_B_IDS.every(id => Math.hypot(S.players[id].x - tm.x, S.players[id].y - tm.y) > 60);
+      if (tmNearBasket && defFar) spawnThought(ap.id, '🙌 LOB IT!');
+    }
+
     const spd = isDoubleTeamed ? 2.8 : S._fastBreak > 0 ? 4.4 : 3.5; // slowed in double team
 
     if (S.joy.active) {
@@ -2795,14 +2849,18 @@ function updateAIDefense() {
   if (brendan._ankleStun > 0) { brendan._ankleStun--; return; }
   if (james._ankleStun > 0) { james._ankleStun--; return; }
 
+  // Pressure defense: CPU gets tighter when human is near game point
+  const humanNearWin = S._deuceActive && S.score[0] > S.score[1];
+  const pressMult = humanNearWin ? 1.2 : 1.0;
+
   // Brendan pressures the carrier — stays close, between carrier and basket
   // Tighten perimeter if human is shooting a lot of 3s
-  const backoffB = (S._human3ptStreak >= 2) ? 16 : 28;
+  const backoffB = (S._human3ptStreak >= 2) ? 16 : (humanNearWin ? 14 : 28);
   const targetBX = Math.max(carrier.x + backoffB, HOOP_X - 35);
   const bDx = targetBX - brendan.x;
   const bDy = (carrier.y - 8) - brendan.y;
   const cpuRubberSpd = (S.score[0] - S.score[1]) >= 4 ? 1.15 : 1.0;
-  const bSpeed = (carrier.vx !== 0 ? 3.0 : 2.2) * cpuRubberSpd;
+  const bSpeed = (carrier.vx !== 0 ? 3.0 : 2.2) * cpuRubberSpd * pressMult;
   if (Math.abs(bDx) > 8) {
     brendan.x += Math.sign(bDx) * bSpeed;
     brendan.anim = 'run';
@@ -3215,6 +3273,15 @@ function loop() {
   }
 
   ctx.restore(); // end shake transform
+
+  // Hard mode: persistent dark vignette
+  if (S._difficulty === 'hard') {
+    const hv = ctx.createRadialGradient(GW / 2, GH / 2, GH * 0.25, GW / 2, GH / 2, GH * 0.85);
+    hv.addColorStop(0, 'rgba(0,0,0,0)');
+    hv.addColorStop(1, 'rgba(0,0,20,0.18)');
+    ctx.fillStyle = hv;
+    ctx.fillRect(0, 0, GW, GH);
+  }
 
   // Game-point vignette intensity
   const humanGP = S.score[0] >= WIN_SCORE - 1;
