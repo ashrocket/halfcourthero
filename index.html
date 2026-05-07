@@ -1038,12 +1038,15 @@ function spawnThought(id, text) {
   const isGood = /PERFECT|GOOD|DUNK|LAYUP|ALLEY|FIRE|CLUTCH|SWISH|YES|LFG|NICE|MONEY|ONE/.test(text);
   const isBad  = /MISS|EARLY|LATE|AIR BALL|TOO FAR/.test(text);
   const bg = isGood ? '#E8FFE8EE' : isBad ? '#FFE8E8EE' : '#FFFFFAEE';
-  const lane = S.thoughts.length % 3;
+  const lanes = [84, 126, 168];
+  const lane = S.thoughts.length % lanes.length;
+  const side = p.x < GW / 2 ? 0 : 1;
+  const baseX = side === 0 ? 104 : GW - 104;
   S.thoughts.push({
-    x: Math.max(70, Math.min(GW - 70, p.x)),
-    y: 112 + lane * 34,
+    x: baseX + (lane - 1) * 18,
+    y: lanes[lane],
     text, ttl: 90, maxTtl: 90,
-    dx: (Math.random() - 0.5) * 0.5,
+    dx: 0,
     bg,
   });
 }
@@ -3316,37 +3319,52 @@ function turnoverToCPU() {
 
 function resolvePaintCrowding() {
   const ids = TEAM_A_IDS.concat(TEAM_B_IDS);
-  const minDist = 30;
-  for (let i = 0; i < ids.length; i++) {
-    for (let j = i + 1; j < ids.length; j++) {
-      const a = S.players[ids[i]];
-      const b = S.players[ids[j]];
-      if (!a || !b) continue;
-      const inPaintTraffic = a.x > HOOP_X - 125 || b.x > HOOP_X - 125;
-      if (!inPaintTraffic) continue;
-      const dx = b.x - a.x;
-      const dy = (b.y - a.y) * 1.45;
-      const dist = Math.hypot(dx, dy) || 0.01;
-      if (dist >= minDist) continue;
+  const minDist = 42;
+  const paintSlots = [
+    { x: HOOP_X - 118, y: COURT_FAR_Y + 8 },
+    { x: HOOP_X - 82,  y: COURT_FAR_Y + 30 },
+    { x: HOOP_X - 46,  y: COURT_FAR_Y + 12 },
+    { x: HOOP_X - 108, y: COURT_NEAR_Y - 4 },
+  ];
 
-      const overlap = (minDist - dist) * 0.18;
-      const nx = dx / dist;
-      const ny = dy / dist / 1.45;
-      const aWeight = a.hasBall ? 0.25 : 0.55;
-      const bWeight = b.hasBall ? 0.25 : 0.55;
-      a.x -= nx * overlap * aWeight;
-      b.x += nx * overlap * bWeight;
-      a.y -= ny * overlap * aWeight;
-      b.y += ny * overlap * bWeight;
-      a.vx *= 0.65; a.vy *= 0.65;
-      b.vx *= 0.65; b.vy *= 0.65;
+  for (let pass = 0; pass < 3; pass++) {
+    for (let i = 0; i < ids.length; i++) {
+      for (let j = i + 1; j < ids.length; j++) {
+        const a = S.players[ids[i]];
+        const b = S.players[ids[j]];
+        if (!a || !b) continue;
+        const inPaintTraffic = a.x > HOOP_X - 135 || b.x > HOOP_X - 135;
+        if (!inPaintTraffic) continue;
+        const dx = b.x - a.x;
+        const dy = (b.y - a.y) * 1.55;
+        const dist = Math.hypot(dx, dy) || 0.01;
+        if (dist >= minDist) continue;
+
+        const overlap = (minDist - dist) * 0.34;
+        const nx = dx / dist;
+        const ny = dy / dist / 1.55;
+        const aWeight = a.hasBall ? 0.18 : 0.62;
+        const bWeight = b.hasBall ? 0.18 : 0.62;
+        a.x -= nx * overlap * aWeight;
+        b.x += nx * overlap * bWeight;
+        a.y -= ny * overlap * aWeight;
+        b.y += ny * overlap * bWeight;
+        a.vx *= 0.35; a.vy *= 0.35;
+        b.vx *= 0.35; b.vy *= 0.35;
+      }
     }
   }
-  for (const id of ids) {
+
+  ids.forEach((id, index) => {
     const p = S.players[id];
+    if (p.x > HOOP_X - 135 && !p.hasBall && Math.hypot(p.vx, p.vy) < 0.9) {
+      const slot = paintSlots[index % paintSlots.length];
+      p.x += (slot.x - p.x) * 0.035;
+      p.y += (slot.y - p.y) * 0.025;
+    }
     p.x = Math.max(20, Math.min(350, p.x));
     p.y = Math.max(COURT_FAR_Y, Math.min(COURT_NEAR_Y, p.y));
-  }
+  });
 }
 
 // ── Player Movement Update ────────────────────────────────────────
@@ -3677,7 +3695,8 @@ function updateCPUDefense() {
   // Pick behavior: if carrier walks into Brendan, push them back slightly
   const distToBrendan = Math.hypot(carrier.x - brendan.x, carrier.y - brendan.y);
   if (distToBrendan < 32 && carrier.vx !== 0) {
-    carrier.x -= carrier.vx * 0.55;
+    carrier.x -= carrier.vx * 0.25;
+    carrier.vx *= 0.55;
   }
 
   // Will plays back — protects the paint and slides toward carrier when they drive inside
@@ -3961,8 +3980,6 @@ function updateShootPower() {
 function updateThoughts() {
   for (let i = S.thoughts.length - 1; i >= 0; i--) {
     S.thoughts[i].ttl--;
-    S.thoughts[i].x += S.thoughts[i].dx;
-    S.thoughts[i].y = Math.max(96, S.thoughts[i].y - 0.05);
     if (S.thoughts[i].ttl <= 0) S.thoughts.splice(i, 1);
   }
 }
