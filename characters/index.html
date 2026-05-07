@@ -196,9 +196,9 @@ function drawFrame() {
       if (isHov) { ctx.shadowColor = c.hue; ctx.shadowBlur = 22 * dpr; }
       ctx.drawImage(c.img, -sW / 2, -sH, sW, sH);
     }
-    ctx.scale(i >= 2 ? -1 : 1, 1); // reset mirror before overlay
-    if (i >= 2) ctx.scale(-1, 1);   // re-apply for overlay coords
-    drawOverlay(c.id);
+    ctx.scale(i >= 2 ? -1 : 1, 1);
+    if (i >= 2) ctx.scale(-1, 1);
+    ctx.save(); ctx.scale(sH / 175, sH / 175); drawOverlay(c.id); ctx.restore();
     ctx.restore();
 
     // Name tag

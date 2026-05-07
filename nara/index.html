@@ -89,7 +89,7 @@ function drawFrame() {
     ctx.drawImage(spr, -sW / 2, -sprH, sW, sprH);
     ctx.shadowBlur = 0;
   }
-  drawOverlay();
+  ctx.save(); ctx.scale(sprH / 175, sprH / 175); drawOverlay(); ctx.restore();
   ctx.restore();
 
   // Name

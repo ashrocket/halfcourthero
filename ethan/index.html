@@ -88,7 +88,8 @@ function drawFrame() {
     ctx.shadowColor=HUE; ctx.shadowBlur=18*dpr;
     ctx.drawImage(spr,-sW/2,-sprH,sW,sprH); ctx.shadowBlur=0;
   }
-  drawOverlay(); ctx.restore();
+  ctx.save();ctx.scale(sprH/175,sprH/175);drawOverlay();ctx.restore();
+  ctx.restore();
   ctx.save(); ctx.textAlign='center'; ctx.textBaseline='middle';
   const ns=Math.min(W*0.12,H*0.065,52*dpr);
   ctx.font=`900 ${ns}px 'Courier New',monospace`; ctx.letterSpacing='0.1em';
