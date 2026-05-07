@@ -239,7 +239,7 @@ const CHARS = {
     skin: '#C68642', hair: '#3D2B1F', shirt: '#32CD32',
     pants: '#1C1C2E', shoes: '#FFFFFF', brow: '#3D2B1F',
     hairStyle: 'long', hue: '#32CD32',
-    quips: ['🎸 YEAH!', '💪 LOW!', '🏀 NICE!', '🔥 FIRE!'],
+    quips: ['🎸 YEAH!', '💪 LOW!', 'NICE!', '🔥 FIRE!'],
     // Abilities: +steal range 20%, faster defender coverage
     ability: 'LOCKDOWN', abilityEmoji: '🛡',
     _3ptBonus: 0, _spd: 1.05, _stealBonus: 0.20, _h: 185
@@ -880,15 +880,6 @@ function drawBall() {
   const b = S.ball;
   if (b.carrier) return;
 
-  // Perfect shot trail
-  if (b.inAir && b._perfect && S.frame % 2 === 0) {
-    S.thoughts.push({
-      x: b.x + (Math.random() - 0.5) * 10,
-      y: b.y + (Math.random() - 0.5) * 10,
-      text: '✨', ttl: 15, maxTtl: 15, dx: 0
-    });
-  }
-
   ctx.fillStyle = 'rgba(0,0,0,0.12)';
   ctx.beginPath(); ctx.ellipse(b.x, FLOOR_Y + 4, 12 - (FLOOR_Y - b.y) * 0.04, 4, 0, 0, Math.PI * 2); ctx.fill();
 
@@ -1032,12 +1023,12 @@ function drawPowerIndicator() {
 }
 
 // ── Thoughts / Popups ────────────────────────────────────────────
-function spawnThought(id, text) {
+function spawnThought(id, text, opts = {}) {
   const p = S.players[id];
   // Color code by outcome
   const isGood = /PERFECT|GOOD|DUNK|LAYUP|ALLEY|FIRE|CLUTCH|SWISH|YES|LFG|NICE|MONEY|ONE/.test(text);
   const isBad  = /MISS|EARLY|LATE|AIR BALL|TOO FAR/.test(text);
-  const bg = isGood ? '#E8FFE8EE' : isBad ? '#FFE8E8EE' : '#FFFFFAEE';
+  const bg = opts.bg || (isGood ? '#E8FFE8EE' : isBad ? '#FFE8E8EE' : '#FFFFFAEE');
   const lanes = [84, 126, 168];
   const lane = S.thoughts.length % lanes.length;
   const side = p.x < GW / 2 ? 0 : 1;
@@ -1055,6 +1046,16 @@ function drawThoughts() {
   for (const th of S.thoughts) {
     const alpha = Math.min(1, th.ttl / 20);
     const sc    = 1 + (1 - th.ttl / th.maxTtl) * 0.18;
+    if (th.particle) {
+      ctx.save();
+      ctx.globalAlpha = alpha * (th.alpha || 1);
+      ctx.fillStyle = th.color || '#FFFFFF';
+      ctx.font = `bold ${th.fontSize || 16}px sans-serif`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(th.text, th.x, th.y);
+      ctx.restore();
+      continue;
+    }
     const fontSize = th.text.length > 16 ? 11 : 13;
     ctx.font = `bold ${fontSize}px sans-serif`;
     const tw = Math.min(GW - 24, ctx.measureText(th.text).width + 20);
@@ -1074,6 +1075,71 @@ function drawThoughts() {
     ctx.fillStyle = '#111'; ctx.font = `bold ${fontSize}px sans-serif`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(th.text, 0, 0);
+    ctx.restore();
+  }
+}
+
+function drawCarriedBallOverlay() {
+  for (const id of [...TEAM_A_IDS, ...TEAM_B_IDS]) {
+    const p = S.players[id];
+    if (!p.hasBall) continue;
+    const f = S.frame;
+    const jy = p.jumpY;
+    const { anim } = p;
+    const depth = Math.max(0, Math.min(1, (p.y - COURT_FAR_Y) / (COURT_NEAR_Y - COURT_FAR_Y)));
+    const dsc = 0.85 + depth * 0.22;
+    let scX = 1, scY = 1, bobY = 0, lean = 0;
+    if (anim === 'idle') {
+      const phase = f * 0.05;
+      bobY = Math.sin(phase) * 3.5;
+      scX = 1 + Math.sin(phase) * 0.012;
+      scY = 1 - Math.sin(phase) * 0.012;
+    } else if (anim === 'run') {
+      const phase = f * 0.20;
+      const intensity = p.cpu ? 0.75 : Math.min(1, Math.hypot(p.vx, p.vy) / 3.5);
+      bobY = -Math.abs(Math.sin(phase)) * 5 * intensity;
+      lean = Math.sin(phase) * 0.06 * intensity;
+      const sq = Math.cos(phase);
+      scX = 1 + sq * 0.03 * intensity;
+      scY = 1 - sq * 0.02 * intensity;
+    } else if (anim === 'jump') {
+      scX = 0.87; scY = 1.16;
+    } else if (anim === 'land') {
+      const startF = p.landStartFrame > 0 ? p.landStartFrame : f;
+      const age = Math.min(f - startF, 18);
+      const t = age / 18;
+      scX = 1 + (1 - t) * 0.22;
+      scY = 1 - (1 - t) * 0.20;
+      bobY = (1 - t) * 6;
+    } else if (anim === 'celebrate') {
+      const phase = f * 0.22;
+      const lift = Math.abs(Math.sin(phase));
+      bobY = -lift * 16;
+      scX = 1 + (1 - lift) * 0.13 - lift * 0.04;
+      scY = 1 - (1 - lift) * 0.09 + lift * 0.07;
+    } else if (anim === 'shoot') {
+      bobY = -10;
+      scX = 0.92; scY = 1.10;
+    } else if (anim === 'sad') {
+      bobY = 6;
+      scX = 1.05; scY = 0.92;
+    }
+
+    ctx.save();
+    ctx.translate(p.x, p.y + jy);
+    ctx.scale(dsc * (p.facing < 0 ? -1 : 1), dsc);
+    ctx.translate(0, bobY);
+    ctx.scale(scX, scY);
+    if (lean) ctx.rotate(lean);
+    if (anim === 'shoot' || anim === 'jump') {
+      drawBallAt(18, -175, 13);
+    } else {
+      const dribPct = Math.abs(Math.sin(f * 0.18));
+      const handY = -78, floorY = -10;
+      const by = handY + (floorY - handY) * (1 - dribPct);
+      const bSize = 13 - (1 - dribPct) * 2;
+      drawBallAt(30, by, bSize);
+    }
     ctx.restore();
   }
 }
@@ -1418,7 +1484,7 @@ function drawHUD() {
     ctx.fillText(secs + 's', GW / 2, 44);
     // Big countdown pop when each second ticks
     if (S.possession === 'a' && S.shotClock % 60 === 59 && secs <= 4 && secs > 0) {
-      S.thoughts.push({ x: GW / 2, y: 200, text: `⏰ ${secs}!`, ttl: 35, maxTtl: 35, dx: 0, bg: '#FF2222CC' });
+      spawnThought(S.activeHuman, `⏰ ${secs}!`, { bg: '#FF2222CC' });
     }
   }
 
@@ -2578,7 +2644,7 @@ function releaseShoot() {
   const isGamePointShot = !S._deuceActive && S.score[0] === WIN_SCORE - 1;
   const isDeuceMatchPt = S._deuceActive && S.score[0] > S.score[1];
   if ((isGamePointShot || isDeuceMatchPt) && (inGreen || isPerfect)) {
-    S.thoughts.push({ x: GW / 2, y: 380, text: '🏆 FOR THE WIN!', ttl: 55, maxTtl: 55, dx: 0, bg: '#FFD700CC' });
+    spawnThought(ap.id, '🏆 FOR THE WIN!', { bg: '#FFD700CC' });
   }
 
   const made = Math.random() < acc;
@@ -2672,7 +2738,7 @@ function handlePassAction() {
 
   S._lastPasser = ap.id;
   S.activeHuman = teammate;
-  spawnThought(teammate, isAlleyOop ? '🙌' : '🏀');
+  spawnThought(teammate, isAlleyOop ? '🙌 LOB!' : 'CATCH!');
   S.switchFlash = { name: CHARS[teammate].name, color: CHARS[teammate].hue, ttl: 70 };
 
   // Team chemistry: Nara↔Ethan passes build chemistry
@@ -2904,7 +2970,7 @@ function updateBall() {
             S._possessionMoves = (S._possessionMoves || 0) + 1;
           } else {
             S._fastBreak = 100;
-            spawnThought(closest.id, '🏀 REBOUND!');
+            spawnThought(closest.id, 'REBOUND!');
           }
         } else {
           turnoverToCPU();
@@ -2948,6 +3014,9 @@ function scorePoint() {
         ttl: 40 + Math.random()*25,
         maxTtl: 65,
         dx: (Math.random()-0.5)*1.5,
+        particle: true,
+        color: ni === 3 ? '#FF69B4' : '#FFD700',
+        fontSize: 16,
       });
     }
   } else if (scorer === TEAM_B_IDS[0] && dist < SHOT_RANGE_LAY) {
@@ -2962,6 +3031,9 @@ function scorePoint() {
         x: S.players[TEAM_B_IDS[1]].x + (ki - 2) * 14,
         y: S.players[TEAM_B_IDS[1]].y - 50 - Math.random()*30,
         text: keys[ki], ttl: 35, maxTtl: 35, dx: (ki - 1.5) * 0.4,
+        particle: true,
+        color: '#C67BFF',
+        fontSize: 15,
       });
     }
   }
@@ -3173,7 +3245,7 @@ function scorePoint() {
   }
   // Game point / advantage
   else if (!S._deuceActive && S.score[0] === WIN_SCORE - 1 && team === 'a') {
-    setTimeout(() => { S.scoreFlash = { text: '🏀 GAME POINT!', color: CHARS.nara.hue, ttl: 90 }; }, 1200);
+    setTimeout(() => { S.scoreFlash = { text: 'GAME POINT!', color: CHARS.nara.hue, ttl: 90 }; }, 1200);
   } else if (!S._deuceActive && S.score[1] === WIN_SCORE - 1 && team === 'b') {
     setTimeout(() => { S.scoreFlash = { text: '⚠️ GAME POINT!', color: CHARS.brendan.hue, ttl: 90 }; }, 1200);
   } else if (S._deuceActive && S.score[0] - S.score[1] === 1) {
@@ -3827,7 +3899,7 @@ function updateCPUBehavior() {
         S.ball.vx = pdx / tPass2;
         S.ball.vy = (pdy - 0.225 * tPass2 * tPass2) / tPass2 - 1;
         S.ball._pass = true; S.ball._passTarget = TEAM_B_IDS[1];
-        spawnThought(TEAM_B_IDS[1], '🏀');
+        spawnThought(TEAM_B_IDS[1], 'CATCH!');
         brendan._givingAndGoing = true;
       }
     }
@@ -3932,7 +4004,7 @@ function cpuShoot(p) {
         S.ball.x = S.players[_rebounder].x;
         S.ball.y = FLOOR_Y - 30;
         S._fastBreak = 120;
-        spawnThought(_rebounder, S._deuceActive ? '🔥 DEUCE BOARD!' : '🏀 REBOUND!');
+        spawnThought(_rebounder, S._deuceActive ? '🔥 DEUCE BOARD!' : 'REBOUND!');
         if (S._deuceActive) setTimeout(() => sfxCrowd(0.5), 200);
       }
     }, 1800);
@@ -3979,8 +4051,11 @@ function updateShootPower() {
 // ── Thoughts Update ───────────────────────────────────────────────
 function updateThoughts() {
   for (let i = S.thoughts.length - 1; i >= 0; i--) {
-    S.thoughts[i].ttl--;
-    if (S.thoughts[i].ttl <= 0) S.thoughts.splice(i, 1);
+    const th = S.thoughts[i];
+    if (th.dx) th.x += th.dx;
+    if (th.particle) th.y -= 0.25;
+    th.ttl--;
+    if (th.ttl <= 0) S.thoughts.splice(i, 1);
   }
 }
 
@@ -4068,6 +4143,10 @@ function loop() {
       text: noteChars[Math.floor(Math.random() * noteChars.length)],
       ttl: 60 + Math.random() * 40, maxTtl: 100,
       dx: (Math.random() - 0.5) * 0.4,
+      particle: true,
+      color: noteColor,
+      fontSize: 14,
+      alpha: 0.8,
     });
   }
 
@@ -4225,13 +4304,14 @@ function loop() {
     }
   }
 
+  updateAndDrawConfetti();
+  drawPowerIndicator();
+  drawThoughts();
   drawShotTrajectory();
   drawShotTypeLabel();
   drawBallTrail();
   drawBall();
-  updateAndDrawConfetti();
-  drawPowerIndicator();
-  drawThoughts();
+  drawCarriedBallOverlay();
   drawSwitchFlash();
 
   // Mini shot power bar above active player when charging
