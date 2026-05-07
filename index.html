@@ -1036,7 +1036,7 @@ function spawnThought(id, text) {
   const isBad  = /MISS|EARLY|LATE|AIR BALL|TOO FAR/.test(text);
   const bg = isGood ? '#E8FFE8EE' : isBad ? '#FFE8E8EE' : '#FFFFFAEE';
   S.thoughts.push({
-    x: p.x, y: p.y + p.jumpY - 120,
+    x: p.x, y: p.y + p.jumpY - 158,
     text, ttl: 90, maxTtl: 90,
     dx: (Math.random() - 0.5) * 0.5,
     bg,
@@ -1655,7 +1655,7 @@ function drawTitle() {
     const bob = Math.sin(S.frame * 0.04 + i * 1.2) * 4;
 
     ctx.save();
-    ctx.translate(cx, 340 + bob);
+    ctx.translate(cx, 310 + bob);
 
     const team = i < 2 ? 0 : 1;
     ctx.shadowColor = team === 0 ? CHARS.nara.hue : CHARS.brendan.hue;
@@ -1667,30 +1667,26 @@ function drawTitle() {
     ctx.restore();
 
     const nameX = cx;
-    fillRR(nameX - 30, 348, 60, 36, 6, 'rgba(0,0,0,0.65)', d.hue, 1.5);
+    fillRR(nameX - 32, 318, 64, 28, 6, 'rgba(0,0,0,0.65)', d.hue, 1.5);
     ctx.fillStyle = d.hue;
     ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(d.name, nameX, 357);
-    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.fillText(d.name, nameX, 327);
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
     ctx.font = '7px monospace'; ctx.letterSpacing = '0';
-    ctx.fillText(d.role.split(' ')[0], nameX, 368);
-    if (d.abilityEmoji) {
-      ctx.fillStyle = d.hue;
-      ctx.font = '8px monospace'; ctx.letterSpacing = '0';
-      ctx.fillText(d.abilityEmoji + ' ' + (d.ability || '').split(' ')[0], nameX, 379);
-    }
+    ctx.fillText(d.role.split(' ')[0], nameX, 339);
   }
 
+  // Team headers above characters
   ctx.fillStyle = CHARS.nara.hue;
-  ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center';
-  ctx.fillText('YOUR TEAM', GW / 4, 380);
+  ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center'; ctx.letterSpacing = '0';
+  ctx.fillText('YOUR TEAM', GW / 4, 268);
   ctx.fillStyle = CHARS.brendan.hue;
-  ctx.fillText('CPU TEAM', (GW * 3) / 4, 380);
+  ctx.fillText('CPU TEAM', (GW * 3) / 4, 268);
 
   ctx.fillStyle = 'rgba(255,255,255,0.5)';
-  ctx.fillRect(GW / 2 - 1, 300, 2, 100);
+  ctx.fillRect(GW / 2 - 1, 270, 2, 80);
   ctx.font = 'bold 16px monospace'; ctx.textAlign = 'center';
-  ctx.fillText('VS', GW / 2, 347);
+  ctx.fillText('VS', GW / 2, 316);
 
   // Difficulty buttons
   const diff = S._difficulty || 'normal';

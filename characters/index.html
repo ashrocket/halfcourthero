@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Band — Nara's Room</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; background: #0a0018; overflow: hidden; font-family: 'Courier New', monospace; }
+  #stage { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  #cv { display: block; cursor: pointer; }
+  .title { position: absolute; top: 36px; left: 50%; transform: translateX(-50%); text-align: center; pointer-events: none; }
+  .title-top { font-size: clamp(10px, 2vw, 14px); letter-spacing: 0.35em; color: #FFD700; }
+  .title-main { font-size: clamp(18px, 4vw, 28px); font-weight: 900; letter-spacing: 0.15em; color: #ffffff; margin-top: 4px; }
+  .hint { position: absolute; bottom: 28px; left: 50%; transform: translateX(-50%); font-size: 11px; letter-spacing: 0.2em; color: #ffffff35; pointer-events: none; }
+  .back-btn { position: absolute; top: 36px; left: 28px; font-size: 13px; letter-spacing: 0.2em; color: #ffffff50; text-decoration: none; transition: color 0.15s; }
+  .back-btn:hover { color: #fff; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="title">
+    <div class="title-top">NARA'S ROOM</div>
+    <div class="title-main">THE BAND</div>
+  </div>
+  <canvas id="cv"></canvas>
+  <a class="back-btn" href="/">← GAME</a>
+  <div class="hint">TAP A CHARACTER</div>
+</div>
+
+<script>
+const CHARS = [
+  { id: 'nara',    name: 'NARA',    role: 'VOCALS · GUITAR', hue: '#FF1493', sprite: '../assets/nara_sprite.png',    page: '../nara/' },
+  { id: 'ethan',   name: 'ETHAN',   role: 'BASS',            hue: '#32CD32', sprite: '../assets/ethan_sprite.png',   page: '../ethan/' },
+  { id: 'brendan', name: 'BRENDAN', role: 'DRUMS',           hue: '#FF6B35', sprite: '../assets/brendan_sprite.png', page: '../brendan/' },
+  { id: 'will',    name: 'WILL',    role: 'KEYS',            hue: '#9B59B6', sprite: '../assets/james_sprite.png',   page: '../will/' },
+];
+
+const canvas = document.getElementById('cv');
+const ctx    = canvas.getContext('2d');
+let W = 0, H = 0;
+let frame = 0;
+let hovered = -1;
+
+// Load sprites
+CHARS.forEach(c => { c.img = new Image(); c.img.src = c.sprite; });
+
+function resize() {
+  const dpr = window.devicePixelRatio || 1;
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const w = Math.min(vw, vh * 1.6, 700);
+  const h = w * 0.85;
+  canvas.width  = w * dpr; canvas.height = h * dpr;
+  canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
+  W = w * dpr; H = h * dpr;
+}
+window.addEventListener('resize', resize);
+resize();
+
+function charX(i) { return W * (0.14 + i * 0.245); }
+function charY()  { return H * 0.72; }
+function sprH()   { return H * 0.68; }
+
+// ── Overlays (same as game) ────────────────────────────────────────
+function drawOverlay(id) {
+  if (id === 'ethan') {
+    ctx.fillStyle = '#C68642';
+    ctx.beginPath(); ctx.ellipse(0, -126, 7, 5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#3D2011';
+    ctx.beginPath(); ctx.moveTo(-8,-164); ctx.lineTo(-17,-162); ctx.lineTo(-19,-118); ctx.lineTo(-9,-118); ctx.lineTo(-9,-160); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(8,-164); ctx.lineTo(17,-162); ctx.lineTo(19,-118); ctx.lineTo(9,-118); ctx.lineTo(9,-160); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#5C3520';
+    ctx.beginPath(); ctx.moveTo(-9,-162); ctx.lineTo(-11,-162); ctx.lineTo(-12,-120); ctx.lineTo(-10,-120); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(9,-162); ctx.lineTo(11,-162); ctx.lineTo(12,-120); ctx.lineTo(10,-120); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#0A0A0A';
+    ctx.beginPath(); ctx.ellipse(0,-161,15,13,0,Math.PI,0); ctx.fill();
+    ctx.fillRect(-15,-163,30,8);
+    ctx.beginPath(); ctx.moveTo(-12,-165); ctx.lineTo(-27,-166); ctx.lineTo(-28,-162); ctx.lineTo(-12,-161); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#2A2A2A';
+    ctx.beginPath(); ctx.roundRect(13,-162,5,3,1); ctx.fill();
+    const eyeY = -150;
+    ctx.fillStyle = 'rgba(5,5,5,0.88)';
+    for (const ex of [-8,8]) { ctx.beginPath(); ctx.arc(ex,eyeY,5.5,0,Math.PI*2); ctx.fill(); ctx.strokeStyle='#111'; ctx.lineWidth=1.5; ctx.stroke(); }
+    ctx.strokeStyle='#111'; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.moveTo(-2.5,eyeY); ctx.lineTo(2.5,eyeY); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-13.5,eyeY); ctx.lineTo(-20,eyeY-1); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(13.5,eyeY); ctx.lineTo(20,eyeY-1); ctx.stroke();
+  }
+  if (id === 'will') {
+    ctx.fillStyle = '#3A4A28';
+    ctx.beginPath(); ctx.ellipse(0,-168,14,7,0,0,Math.PI*2); ctx.fill();
+    ctx.fillRect(-14,-168,28,14);
+    ctx.beginPath(); ctx.ellipse(0,-154,22,6,0,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#2A3318';
+    ctx.beginPath(); ctx.ellipse(0,-153,22,4,0,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#252E18'; ctx.beginPath(); ctx.ellipse(-6,-163,4,3,0.3,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(7,-159,3,2.5,-0.3,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(1,-167,2.5,1.5,0,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#5A6A38'; ctx.beginPath(); ctx.ellipse(-2,-161,2.5,2,-0.2,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(8,-157,2,1.5,0.4,0,Math.PI*2); ctx.fill();
+    const eyeYj=-149;
+    ctx.strokeStyle='#B87030'; ctx.lineWidth=2; ctx.fillStyle='rgba(255,200,150,0.1)';
+    for (const ex of [-8,8]) { ctx.beginPath(); ctx.arc(ex,eyeYj,5.5,0,Math.PI*2); ctx.fill(); ctx.stroke(); }
+    ctx.strokeStyle='#B87030'; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.moveTo(-2.5,eyeYj); ctx.lineTo(2.5,eyeYj); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-13.5,eyeYj); ctx.lineTo(-20,eyeYj-1); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(13.5,eyeYj); ctx.lineTo(20,eyeYj-1); ctx.stroke();
+    ctx.fillStyle='rgba(65,35,15,0.42)';
+    ctx.beginPath(); ctx.ellipse(0,-137,11,9,0,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(0,-144,9,4.5,0,0,Math.PI*2); ctx.fill();
+  }
+  if (id === 'brendan') {
+    ctx.fillStyle='#C03A15'; ctx.beginPath(); ctx.ellipse(0,-131,14,12,0,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(0,-141,11,5,0,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#E04A20'; ctx.beginPath(); ctx.ellipse(0,-132,9,7,0,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#8A2510'; ctx.beginPath(); ctx.ellipse(0,-122,10,5,0,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#0C0806';
+    for (const [hx,hy,hr] of [[-15,-148,7],[-22,-144,6],[-17,-137,7],[-22,-131,6.5],[-16,-125,6.5],[-21,-119,6],[15,-148,7],[22,-144,6],[17,-137,7],[22,-131,6.5],[16,-125,6.5],[21,-119,6]])
+    { ctx.beginPath(); ctx.arc(hx+1,hy+1,hr,0,Math.PI*2); ctx.fill(); }
+    ctx.fillStyle='#1C0E09';
+    for (const [hx,hy,hr] of [[-15,-148,7],[-22,-144,6],[-17,-137,7],[-22,-131,6.5],[-16,-125,6.5],[-21,-119,6],[15,-148,7],[22,-144,6],[17,-137,7],[22,-131,6.5],[16,-125,6.5],[21,-119,6]])
+    { ctx.beginPath(); ctx.arc(hx,hy,hr,0,Math.PI*2); ctx.fill(); }
+    ctx.fillStyle='#3A1A0A';
+    for (const [hx,hy,hr] of [[-15,-148,7],[-22,-144,6],[-17,-137,7],[-22,-131,6.5],[-16,-125,6.5],[-21,-119,6],[15,-148,7],[22,-144,6],[17,-137,7],[22,-131,6.5],[16,-125,6.5],[21,-119,6]])
+    { ctx.beginPath(); ctx.arc(hx-hr*0.3,hy-hr*0.35,hr*0.45,0,Math.PI*2); ctx.fill(); }
+    ctx.fillStyle='#0F0F0F'; ctx.beginPath(); ctx.ellipse(0,-163,16,13,0,Math.PI,0); ctx.fill();
+    ctx.fillRect(-16,-165,32,13);
+    ctx.fillStyle='#0A0A0A'; ctx.fillRect(-16,-154,32,5);
+    ctx.strokeStyle='#2A2A2A'; ctx.lineWidth=0.8;
+    for (let i=-14;i<=14;i+=3) { ctx.beginPath(); ctx.moveTo(i,-155); ctx.lineTo(i,-150); ctx.stroke(); }
+  }
+}
+
+function hitTest(mx, my) {
+  for (let i = 0; i < CHARS.length; i++) {
+    const cx = charX(i) / (window.devicePixelRatio||1);
+    const cy = charY() / (window.devicePixelRatio||1);
+    const sH = sprH() / (window.devicePixelRatio||1);
+    const sW = sH * 0.35;
+    if (mx > cx - sW * 0.6 && mx < cx + sW * 0.6 && my > cy - sH && my < cy + 20) return i;
+  }
+  return -1;
+}
+
+canvas.addEventListener('mousemove', e => {
+  const r = canvas.getBoundingClientRect();
+  hovered = hitTest(e.clientX - r.left, e.clientY - r.top);
+  canvas.style.cursor = hovered >= 0 ? 'pointer' : 'default';
+});
+canvas.addEventListener('click', e => {
+  const r = canvas.getBoundingClientRect();
+  const idx = hitTest(e.clientX - r.left, e.clientY - r.top);
+  if (idx >= 0) window.location.href = CHARS[idx].page;
+});
+canvas.addEventListener('touchend', e => {
+  const t = e.changedTouches[0];
+  const r = canvas.getBoundingClientRect();
+  const idx = hitTest(t.clientX - r.left, t.clientY - r.top);
+  if (idx >= 0) window.location.href = CHARS[idx].page;
+});
+
+function drawFrame() {
+  ctx.clearRect(0, 0, W, H);
+  const dpr = window.devicePixelRatio || 1;
+
+  for (let i = 0; i < CHARS.length; i++) {
+    const c   = CHARS[i];
+    const cx  = charX(i);
+    const cy  = charY();
+    const sH  = sprH();
+    const bob = Math.sin(frame * 0.045 + i * 1.2) * (H * 0.008);
+    const isHov = hovered === i;
+    const sc  = isHov ? 1.07 : 1.0;
+
+    // Glow
+    if (isHov) {
+      const grd = ctx.createRadialGradient(cx, cy, 0, cx, cy, sH * 0.5);
+      grd.addColorStop(0, c.hue + '28'); grd.addColorStop(1, 'transparent');
+      ctx.fillStyle = grd; ctx.fillRect(0, 0, W, H);
+    }
+
+    // Ground shadow
+    ctx.save();
+    ctx.translate(cx, cy + 8);
+    ctx.scale(sc * 0.55, 0.18);
+    ctx.beginPath(); ctx.arc(0, 0, sH * 0.18, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(0,0,0,${isHov ? 0.35 : 0.22})`; ctx.fill();
+    ctx.restore();
+
+    // Character
+    ctx.save();
+    ctx.translate(cx, cy + bob);
+    ctx.scale(sc * (i >= 2 ? -1 : 1), sc);
+    if (c.img.complete && c.img.naturalWidth > 0) {
+      const sW = sH * c.img.naturalWidth / c.img.naturalHeight;
+      if (isHov) { ctx.shadowColor = c.hue; ctx.shadowBlur = 22 * dpr; }
+      ctx.drawImage(c.img, -sW / 2, -sH, sW, sH);
+    }
+    ctx.scale(i >= 2 ? -1 : 1, 1); // reset mirror before overlay
+    if (i >= 2) ctx.scale(-1, 1);   // re-apply for overlay coords
+    drawOverlay(c.id);
+    ctx.restore();
+
+    // Name tag
+    const tagY = (cy - sH * 0.02 + bob) / dpr;
+    const tagX = cx / dpr;
+    const pad = 10 * dpr;
+    ctx.save();
+    ctx.font = `bold ${9 * dpr}px monospace`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const tw = ctx.measureText(c.name).width + pad * 2.2;
+    const th = 22 * dpr;
+    ctx.fillStyle = isHov ? c.hue : 'rgba(0,0,0,0.7)';
+    ctx.strokeStyle = c.hue; ctx.lineWidth = 1.5 * dpr;
+    const rx = cx - tw / 2, ry = cy + 12 * dpr;
+    ctx.beginPath(); ctx.roundRect(rx, ry, tw, th, 5 * dpr); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = isHov ? '#111' : c.hue;
+    ctx.fillText(c.name, cx, ry + th / 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.font = `${7 * dpr}px monospace`;
+    ctx.fillText(c.role.split(' ')[0], cx, ry + th + 10 * dpr);
+    ctx.restore();
+  }
+}
+
+function tick() {
+  frame++;
+  drawFrame();
+  requestAnimationFrame(tick);
+}
+tick();
+</script>
+</body>
+</html>

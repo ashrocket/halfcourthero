@@ -2,163 +2,120 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>WILL — Nara's Room</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { width: 100%; height: 100%; background: #0d0018; overflow: hidden; font-family: 'Courier New', monospace; }
-  #stage { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-  #cv { display: block; cursor: grab; }
-  #cv:active { cursor: grabbing; }
-  .name-block { position: absolute; top: 40px; left: 50%; transform: translateX(-50%); text-align: center; pointer-events: none; }
-  .char-name { font-size: clamp(32px, 6vw, 64px); font-weight: 900; letter-spacing: 0.12em; color: #9B59B6; text-shadow: 0 0 30px #9B59B680, 0 0 60px #9B59B640; }
-  .char-role { font-size: clamp(12px, 2vw, 18px); letter-spacing: 0.3em; color: #C880FF; opacity: 0.85; margin-top: 4px; }
-  .info-block { position: absolute; bottom: 48px; left: 50%; transform: translateX(-50%); text-align: center; pointer-events: none; }
-  .ability { font-size: clamp(11px, 1.8vw, 15px); letter-spacing: 0.25em; color: #9B59B6; opacity: 0.75; }
-  .controls { position: absolute; bottom: 80px; right: 28px; display: flex; flex-direction: column; gap: 10px; }
-  .btn { width: 44px; height: 44px; border-radius: 50%; border: 2px solid #9B59B660; background: rgba(155,89,182,0.12); color: #C880FF; font-size: 22px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.15s, border-color 0.15s; user-select: none; }
-  .btn:hover { background: rgba(155,89,182,0.28); border-color: #9B59B6; }
-  .back-btn { position: absolute; top: 36px; left: 28px; font-size: 13px; letter-spacing: 0.2em; color: #9B59B680; text-decoration: none; transition: color 0.15s; }
-  .back-btn:hover { color: #9B59B6; }
-  .orbit-hint { position: absolute; bottom: 28px; left: 50%; transform: translateX(-50%); font-size: 11px; letter-spacing: 0.2em; color: #ffffff30; pointer-events: none; }
+  html, body { width: 100%; height: 100%; background: #0d0018; overflow: hidden; touch-action: none; }
+  #cv { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .controls { position: absolute; bottom: 80px; right: 20px; display: flex; flex-direction: column; gap: 10px; }
+  .btn { width: 44px; height: 44px; border-radius: 50%; border: 2px solid #9B59B660; background: rgba(155,89,182,0.15); color: #C880FF; font-size: 22px; cursor: pointer; display: flex; align-items: center; justify-content: center; user-select: none; font-family: monospace; }
+  .back-btn { position: absolute; top: 20px; left: 20px; font-size: 12px; letter-spacing: 0.2em; color: #9B59B670; text-decoration: none; font-family: 'Courier New', monospace; padding: 8px 12px; }
 </style>
 </head>
 <body>
-<div id="stage">
-  <div class="name-block">
-    <div class="char-name">WILL</div>
-    <div class="char-role">KEYS</div>
-  </div>
-  <canvas id="cv"></canvas>
-  <div class="info-block">
-    <div class="ability">🔭 DEEP RANGE · +8% THREE POINT</div>
-  </div>
-  <div class="controls">
-    <div class="btn" id="zoomIn">+</div>
-    <div class="btn" id="zoomOut">−</div>
-  </div>
-  <a class="back-btn" href="/">← BACK TO GAME</a>
-  <div class="orbit-hint">DRAG TO ORBIT · SCROLL TO ZOOM</div>
+<canvas id="cv"></canvas>
+<div class="controls">
+  <div class="btn" id="zoomIn">+</div>
+  <div class="btn" id="zoomOut">−</div>
 </div>
+<a class="back-btn" href="../characters/">← ALL</a>
 
 <script>
-const CHAR_ID    = 'james';
-const SPRITE_SRC = '../assets/james_sprite.png';
-const HUE        = '#9B59B6';
+const HUE    = '#9B59B6';
+const NAME   = 'WILL';
+const ROLE   = 'KEYS';
+const ABIL   = '🔭  DEEP RANGE  ·  +8% THREE POINT';
+const SPRITE = '../assets/james_sprite.png';
 
 const canvas = document.getElementById('cv');
 const ctx    = canvas.getContext('2d');
-let W = 0, H = 0;
-let zoom = 1.0;
-const MIN_ZOOM = 0.4, MAX_ZOOM = 3.0;
+let W = 0, H = 0, zoom = 1.0;
+const MIN_ZOOM = 0.4, MAX_ZOOM = 4.0;
 let orbitAngle = 0;
-let orbitSpeed = 0.007;
+const orbitSpeed = 0.007;
 let frame = 0;
-let dragging = false, lastX = 0;
-let orbitDragVel = 0;
+let activePointers = new Map();
+let pinchStartDist = 0, pinchStartZoom = 1, orbitDragVel = 0;
 
-const spr = new Image();
-spr.src = SPRITE_SRC;
+const spr = new Image(); spr.src = SPRITE;
 
 function resize() {
-  const dpr = window.devicePixelRatio || 1;
-  const sz = Math.min(window.innerWidth, window.innerHeight) * 0.72;
-  canvas.width = sz * dpr; canvas.height = sz * dpr;
-  canvas.style.width = sz + 'px'; canvas.style.height = sz + 'px';
-  W = sz * dpr; H = sz * dpr;
+  const dpr = window.devicePixelRatio||1;
+  canvas.width=window.innerWidth*dpr; canvas.height=window.innerHeight*dpr;
+  canvas.style.width=window.innerWidth+'px'; canvas.style.height=window.innerHeight+'px';
+  W=canvas.width; H=canvas.height;
 }
-window.addEventListener('resize', resize);
-resize();
+window.addEventListener('resize',resize); resize();
 
 function drawOverlay() {
-  // Dark camo bucket hat
-  ctx.fillStyle = '#3A4A28';
-  ctx.beginPath(); ctx.ellipse(0, -168, 14, 7, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.fillRect(-14, -168, 28, 14);
-  ctx.beginPath(); ctx.ellipse(0, -154, 22, 6, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#2A3318';
-  ctx.beginPath(); ctx.ellipse(0, -153, 22, 4, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#252E18';
-  ctx.beginPath(); ctx.ellipse(-6, -163, 4, 3, 0.3, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.ellipse(7, -159, 3, 2.5, -0.3, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.ellipse(1, -167, 2.5, 1.5, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#5A6A38';
-  ctx.beginPath(); ctx.ellipse(-2, -161, 2.5, 2, -0.2, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.ellipse(8, -157, 2, 1.5, 0.4, 0, Math.PI * 2); ctx.fill();
-
-  // Round amber-frame glasses
-  const eyeYj = -149;
-  ctx.strokeStyle = '#B87030'; ctx.lineWidth = 2;
-  ctx.fillStyle = 'rgba(255,200,150,0.1)';
-  for (const ex of [-8, 8]) {
-    ctx.beginPath(); ctx.arc(ex, eyeYj, 5.5, 0, Math.PI * 2);
-    ctx.fill(); ctx.stroke();
-  }
-  ctx.strokeStyle = '#B87030'; ctx.lineWidth = 1.5;
-  ctx.beginPath(); ctx.moveTo(-2.5, eyeYj); ctx.lineTo(2.5, eyeYj); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(-13.5, eyeYj); ctx.lineTo(-20, eyeYj - 1); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(13.5, eyeYj); ctx.lineTo(20, eyeYj - 1); ctx.stroke();
-
-  // 5 o'clock shadow
-  ctx.fillStyle = 'rgba(65,35,15,0.42)';
-  ctx.beginPath(); ctx.ellipse(0, -137, 11, 9, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.ellipse(0, -144, 9, 4.5, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle='#3A4A28';
+  ctx.beginPath(); ctx.ellipse(0,-168,14,7,0,0,Math.PI*2); ctx.fill();
+  ctx.fillRect(-14,-168,28,14);
+  ctx.beginPath(); ctx.ellipse(0,-154,22,6,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#2A3318'; ctx.beginPath(); ctx.ellipse(0,-153,22,4,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#252E18';
+  ctx.beginPath(); ctx.ellipse(-6,-163,4,3,0.3,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(7,-159,3,2.5,-0.3,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(1,-167,2.5,1.5,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#5A6A38';
+  ctx.beginPath(); ctx.ellipse(-2,-161,2.5,2,-0.2,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(8,-157,2,1.5,0.4,0,Math.PI*2); ctx.fill();
+  ctx.strokeStyle='#B87030'; ctx.lineWidth=2; ctx.fillStyle='rgba(255,200,150,0.1)';
+  for(const ex of [-8,8]){ctx.beginPath();ctx.arc(ex,-149,5.5,0,Math.PI*2);ctx.fill();ctx.stroke();}
+  ctx.strokeStyle='#B87030'; ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.moveTo(-2.5,-149);ctx.lineTo(2.5,-149);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(-13.5,-149);ctx.lineTo(-20,-150);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(13.5,-149);ctx.lineTo(20,-150);ctx.stroke();
+  ctx.fillStyle='rgba(65,35,15,0.42)';
+  ctx.beginPath();ctx.ellipse(0,-137,11,9,0,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.ellipse(0,-144,9,4.5,0,0,Math.PI*2);ctx.fill();
 }
 
 function drawFrame() {
-  ctx.clearRect(0, 0, W, H);
-  const cx = W / 2, cy = H / 2;
-  const sprH = H * 0.58;
-
-  const grd = ctx.createRadialGradient(cx, cy + sprH * 0.1, 0, cx, cy, H * 0.55);
-  grd.addColorStop(0, HUE + '18'); grd.addColorStop(0.5, HUE + '08'); grd.addColorStop(1, 'transparent');
-  ctx.fillStyle = grd; ctx.fillRect(0, 0, W, H);
-
-  const squish = Math.abs(Math.cos(orbitAngle));
-  ctx.save();
-  ctx.translate(cx, cy + sprH * 0.52);
-  ctx.scale(squish * 0.9 + 0.1, 1);
-  ctx.beginPath(); ctx.ellipse(0, 0, sprH * 0.22, sprH * 0.05, 0, 0, Math.PI * 2);
-  ctx.fillStyle = `rgba(0,0,0,${0.22 + 0.12 * squish})`; ctx.fill();
-  ctx.restore();
-
-  const bob = Math.sin(frame * 0.045) * (H * 0.012);
-  const charY = cy + sprH * 0.5 + bob;
-  const facing = Math.cos(orbitAngle) >= 0 ? 1 : -1;
-  const xScale = Math.max(0.04, Math.abs(Math.cos(orbitAngle)));
-
-  ctx.save();
-  ctx.translate(cx, charY);
-  ctx.scale(zoom * xScale * facing, zoom);
-  if (spr.complete && spr.naturalWidth > 0) {
-    const sH = sprH, sW = sH * spr.naturalWidth / spr.naturalHeight;
-    ctx.drawImage(spr, -sW / 2, -sH, sW, sH);
+  ctx.clearRect(0,0,W,H);
+  const dpr=window.devicePixelRatio||1, cx=W/2, cy=H/2, sprH=H*0.60;
+  const grd=ctx.createRadialGradient(cx,cy,0,cx,cy,H*0.5);
+  grd.addColorStop(0,HUE+'20');grd.addColorStop(0.6,HUE+'08');grd.addColorStop(1,'transparent');
+  ctx.fillStyle=grd;ctx.fillRect(0,0,W,H);
+  const sq=Math.abs(Math.cos(orbitAngle));
+  ctx.save();ctx.translate(cx,cy+sprH*0.53);ctx.scale((sq*0.85+0.15)*zoom,0.3*zoom);
+  ctx.beginPath();ctx.arc(0,0,sprH*0.2,0,Math.PI*2);
+  ctx.fillStyle=`rgba(0,0,0,${0.18+0.15*sq})`;ctx.fill();ctx.restore();
+  const bob=Math.sin(frame*0.045)*(H*0.008), charY=cy+sprH*0.5+bob;
+  const facing=Math.cos(orbitAngle)>=0?1:-1, xScale=Math.max(0.14,Math.abs(Math.cos(orbitAngle)));
+  ctx.save();ctx.translate(cx,charY);ctx.scale(zoom*xScale*facing,zoom);
+  if(spr.complete&&spr.naturalWidth>0){
+    const sW=sprH*spr.naturalWidth/spr.naturalHeight;
+    ctx.shadowColor=HUE;ctx.shadowBlur=18*dpr;
+    ctx.drawImage(spr,-sW/2,-sprH,sW,sprH);ctx.shadowBlur=0;
   }
-  drawOverlay();
+  drawOverlay();ctx.restore();
+  ctx.save();ctx.textAlign='center';ctx.textBaseline='middle';
+  const ns=Math.min(W*0.12,H*0.065,52*dpr);
+  ctx.font=`900 ${ns}px 'Courier New',monospace`;ctx.letterSpacing='0.1em';
+  ctx.fillStyle=HUE;ctx.shadowColor=HUE;ctx.shadowBlur=20*dpr;
+  ctx.fillText(NAME,cx,H*0.08);ctx.shadowBlur=0;
+  ctx.font=`${ns*0.38}px 'Courier New',monospace`;ctx.letterSpacing='0.28em';
+  ctx.fillStyle=HUE+'AA';ctx.fillText(ROLE,cx,H*0.08+ns*0.72);
+  ctx.font=`${ns*0.3}px 'Courier New',monospace`;ctx.letterSpacing='0.18em';
+  ctx.fillStyle=HUE+'90';ctx.fillText(ABIL,cx,H*0.93);
+  ctx.font=`${ns*0.24}px 'Courier New',monospace`;ctx.letterSpacing='0.18em';
+  ctx.fillStyle='rgba(255,255,255,0.2)';ctx.fillText('DRAG TO ORBIT  ·  PINCH TO ZOOM',cx,H*0.97);
   ctx.restore();
 }
 
-function tick() {
-  frame++;
-  if (!dragging) { orbitAngle += orbitSpeed + orbitDragVel; orbitDragVel *= 0.96; }
-  drawFrame();
-  requestAnimationFrame(tick);
-}
+function tick(){frame++;if(activePointers.size<2){orbitAngle+=orbitSpeed+orbitDragVel;orbitDragVel*=0.95;}drawFrame();requestAnimationFrame(tick);}
 tick();
 
-document.getElementById('zoomIn').addEventListener('click', () => { zoom = Math.min(MAX_ZOOM, zoom * 1.2); });
-document.getElementById('zoomOut').addEventListener('click', () => { zoom = Math.max(MIN_ZOOM, zoom / 1.2); });
-canvas.addEventListener('wheel', e => {
-  e.preventDefault();
-  zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom * (e.deltaY > 0 ? 0.9 : 1.1)));
-}, { passive: false });
-canvas.addEventListener('pointerdown', e => { dragging = true; lastX = e.clientX; canvas.setPointerCapture(e.pointerId); });
-canvas.addEventListener('pointermove', e => {
-  if (!dragging) return;
-  const dx = e.clientX - lastX;
-  orbitAngle += dx * 0.012; orbitDragVel = dx * 0.012; lastX = e.clientX;
-});
-canvas.addEventListener('pointerup', () => { dragging = false; });
+document.getElementById('zoomIn').addEventListener('click',()=>{zoom=Math.min(MAX_ZOOM,zoom*1.2);});
+document.getElementById('zoomOut').addEventListener('click',()=>{zoom=Math.max(MIN_ZOOM,zoom/1.2);});
+canvas.addEventListener('wheel',e=>{e.preventDefault();zoom=Math.max(MIN_ZOOM,Math.min(MAX_ZOOM,zoom*(e.deltaY>0?0.9:1.1)));},{passive:false});
+function getPinchDist(){const pts=[...activePointers.values()];return Math.hypot(pts[1].x-pts[0].x,pts[1].y-pts[0].y);}
+canvas.addEventListener('pointerdown',e=>{e.preventDefault();canvas.setPointerCapture(e.pointerId);activePointers.set(e.pointerId,{x:e.clientX,y:e.clientY});if(activePointers.size===2){pinchStartDist=getPinchDist();pinchStartZoom=zoom;}});
+canvas.addEventListener('pointermove',e=>{if(!activePointers.has(e.pointerId))return;const prev=activePointers.get(e.pointerId);activePointers.set(e.pointerId,{x:e.clientX,y:e.clientY});if(activePointers.size===2){const d=getPinchDist();if(pinchStartDist>0)zoom=Math.max(MIN_ZOOM,Math.min(MAX_ZOOM,pinchStartZoom*d/pinchStartDist));}else{const dx=e.clientX-prev.x;orbitAngle+=dx*0.014;orbitDragVel=dx*0.014;}});
+canvas.addEventListener('pointerup',e=>{activePointers.delete(e.pointerId);pinchStartDist=0;});
+canvas.addEventListener('pointercancel',e=>{activePointers.delete(e.pointerId);});
 </script>
 </body>
 </html>
