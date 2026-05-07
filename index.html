@@ -381,6 +381,7 @@ function initState() {
     _fireModeFrames: 0,
     hoopFlash: 0,
     _fastBreak: 0,
+    _inboundDelay: 0,
     _lastPasser: null, // for assist tracking
 
     // Onboarding
@@ -1029,7 +1030,7 @@ function spawnThought(id, text, opts = {}) {
   const isGood = /PERFECT|GOOD|DUNK|LAYUP|ALLEY|FIRE|CLUTCH|SWISH|YES|LFG|NICE|MONEY|ONE/.test(text);
   const isBad  = /MISS|EARLY|LATE|AIR BALL|TOO FAR/.test(text);
   const bg = opts.bg || (isGood ? '#E8FFE8EE' : isBad ? '#FFE8E8EE' : '#FFFFFAEE');
-  const lanes = [84, 126, 168];
+  const lanes = [80, 118, 156];
   const lane = S.thoughts.length % lanes.length;
   const side = p.x < GW / 2 ? 0 : 1;
   const baseX = side === 0 ? 104 : GW - 104;
@@ -3369,7 +3370,16 @@ function resetBallAfterScore(nextPossession) {
   S.ball.carrier = carrier;
   S.ball._made   = undefined;
   S.players[carrier].hasBall = true;
-  if (nextPossession === 'a') S.activeHuman = S._selectedPlayer || TEAM_A_IDS[0];
+  if (nextPossession === 'a') {
+    S.activeHuman = S._selectedPlayer || TEAM_A_IDS[0];
+  } else {
+    // Auto-switch to best defender: nearest human to CPU ball handler
+    const cpuCarrier = S.players[TEAM_B_IDS[0]];
+    const d0 = Math.hypot(S.players[TEAM_A_IDS[0]].x - cpuCarrier.x, S.players[TEAM_A_IDS[0]].y - cpuCarrier.y);
+    const d1 = Math.hypot(S.players[TEAM_A_IDS[1]].x - cpuCarrier.x, S.players[TEAM_A_IDS[1]].y - cpuCarrier.y);
+    S.activeHuman = d0 <= d1 ? TEAM_A_IDS[0] : TEAM_A_IDS[1];
+    S._inboundDelay = 90;
+  }
 }
 
 function turnoverToCPU() {
@@ -3387,6 +3397,11 @@ function turnoverToCPU() {
   S.shootHeld = false; S.shootPower = 0;
   S.players[TEAM_B_IDS[0]]._givingAndGoing = false;
   S.players[TEAM_B_IDS[1]]._postUp = false;
+  const cpuCarrierT = S.players[TEAM_B_IDS[0]];
+  const dt0 = Math.hypot(S.players[TEAM_A_IDS[0]].x - cpuCarrierT.x, S.players[TEAM_A_IDS[0]].y - cpuCarrierT.y);
+  const dt1 = Math.hypot(S.players[TEAM_A_IDS[1]].x - cpuCarrierT.x, S.players[TEAM_A_IDS[1]].y - cpuCarrierT.y);
+  S.activeHuman = dt0 <= dt1 ? TEAM_A_IDS[0] : TEAM_A_IDS[1];
+  S._inboundDelay = 60;
 }
 
 function resolvePaintCrowding() {
@@ -3421,15 +3436,15 @@ function resolvePaintCrowding() {
         b.x += nx * overlap * bWeight;
         a.y -= ny * overlap * aWeight;
         b.y += ny * overlap * bWeight;
-        a.vx *= 0.35; a.vy *= 0.35;
-        b.vx *= 0.35; b.vy *= 0.35;
+        if (ids[i] !== S.activeHuman) { a.vx *= 0.35; a.vy *= 0.35; }
+        if (ids[j] !== S.activeHuman) { b.vx *= 0.35; b.vy *= 0.35; }
       }
     }
   }
 
   ids.forEach((id, index) => {
     const p = S.players[id];
-    if (p.x > HOOP_X - 135 && !p.hasBall && Math.hypot(p.vx, p.vy) < 0.9) {
+    if (id !== S.activeHuman && p.x > HOOP_X - 135 && !p.hasBall && Math.hypot(p.vx, p.vy) < 0.9) {
       const slot = paintSlots[index % paintSlots.length];
       p.x += (slot.x - p.x) * 0.035;
       p.y += (slot.y - p.y) * 0.025;
@@ -3580,8 +3595,8 @@ function updatePlayers() {
       targetY = tp._cutTarget.y;
       const tdx = targetX - tp.x, tdy = targetY - tp.y;
       if (Math.hypot(tdx, tdy) < 12) tp._cutting = false;
-      tp.x += Math.sign(tdx) * 3.2;
-      tp.y += Math.sign(tdy) * 2.0;
+      tp.x += Math.sign(tdx) * Math.min(3.2, Math.abs(tdx));
+      tp.y += Math.sign(tdy) * Math.min(2.0, Math.abs(tdy));
       tp.anim = 'run';
       tp.facing = tdx > 0 ? 1 : -1;
     } else {
@@ -3604,8 +3619,8 @@ function updatePlayers() {
       if (Math.abs(targetX - ap.x) < 60) targetX = apZone === 'left' ? 80 : HOOP_X - 42;
       const tdx = targetX - tp.x, tdy = targetY - tp.y;
       if (Math.abs(tdx) > 8 || Math.abs(tdy) > 8) {
-        tp.x += Math.sign(tdx) * 2.5;
-        tp.y += Math.sign(tdy) * 1.5;
+        tp.x += Math.sign(tdx) * Math.min(2.5, Math.abs(tdx));
+        tp.y += Math.sign(tdy) * Math.min(1.5, Math.abs(tdy));
         tp.anim = 'run';
         tp.facing = tdx > 0 ? 1 : -1;
       } else {
@@ -3618,7 +3633,11 @@ function updatePlayers() {
 
   } else {
     // CPU offense
-    updateCPUBehavior();
+    if (S._inboundDelay > 0) {
+      S._inboundDelay--;
+    } else {
+      updateCPUBehavior();
+    }
     // Human defends — inertia movement (same feel as offense)
     const ap  = S.players[S.activeHuman];
     const spd = 3.2;
@@ -3653,7 +3672,8 @@ function updatePlayers() {
     const guardY = markTarget ? markTarget.y : (COURT_FAR_Y + COURT_NEAR_Y) / 2;
     const td2x = guardX - tp2.x, td2y = guardY - tp2.y;
     if (Math.abs(td2x) > 8 || Math.abs(td2y) > 8) {
-      tp2.x += Math.sign(td2x) * 1.8; tp2.y += Math.sign(td2y) * 1.2;
+      tp2.x += Math.sign(td2x) * Math.min(1.8, Math.abs(td2x));
+      tp2.y += Math.sign(td2y) * Math.min(1.2, Math.abs(td2y));
       tp2.anim = 'run'; tp2.facing = td2x > 0 ? 1 : -1;
     } else tp2.anim = 'idle';
     tp2.x = Math.max(20, Math.min(350, tp2.x));
