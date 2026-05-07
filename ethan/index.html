@@ -48,27 +48,7 @@ function resize() {
 }
 window.addEventListener('resize', resize); resize();
 
-function drawOverlay() {
-  ctx.fillStyle = '#C68642';
-  ctx.beginPath(); ctx.ellipse(0,-126,7,5,0,0,Math.PI*2); ctx.fill();
-  ctx.fillStyle = '#3D2011';
-  ctx.beginPath(); ctx.moveTo(-8,-164); ctx.lineTo(-17,-162); ctx.lineTo(-19,-118); ctx.lineTo(-9,-118); ctx.lineTo(-9,-160); ctx.closePath(); ctx.fill();
-  ctx.beginPath(); ctx.moveTo(8,-164); ctx.lineTo(17,-162); ctx.lineTo(19,-118); ctx.lineTo(9,-118); ctx.lineTo(9,-160); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = '#5C3520';
-  ctx.beginPath(); ctx.moveTo(-9,-162); ctx.lineTo(-11,-162); ctx.lineTo(-12,-120); ctx.lineTo(-10,-120); ctx.closePath(); ctx.fill();
-  ctx.beginPath(); ctx.moveTo(9,-162); ctx.lineTo(11,-162); ctx.lineTo(12,-120); ctx.lineTo(10,-120); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = '#0A0A0A';
-  ctx.beginPath(); ctx.ellipse(0,-161,15,13,0,Math.PI,0); ctx.fill();
-  ctx.fillRect(-15,-163,30,8);
-  ctx.beginPath(); ctx.moveTo(-12,-165); ctx.lineTo(-27,-166); ctx.lineTo(-28,-162); ctx.lineTo(-12,-161); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = '#2A2A2A'; ctx.beginPath(); ctx.roundRect(13,-162,5,3,1); ctx.fill();
-  ctx.fillStyle = 'rgba(5,5,5,0.88)';
-  for (const ex of [-8,8]) { ctx.beginPath(); ctx.arc(ex,-150,5.5,0,Math.PI*2); ctx.fill(); ctx.strokeStyle='#111'; ctx.lineWidth=1.5; ctx.stroke(); }
-  ctx.strokeStyle='#111'; ctx.lineWidth=1.5;
-  ctx.beginPath(); ctx.moveTo(-2.5,-150); ctx.lineTo(2.5,-150); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(-13.5,-150); ctx.lineTo(-20,-151); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(13.5,-150); ctx.lineTo(20,-151); ctx.stroke();
-}
+function drawOverlay() { /* features baked into sprite */ }
 
 function drawFrame() {
   ctx.clearRect(0,0,W,H);

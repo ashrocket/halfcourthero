@@ -259,7 +259,7 @@ const CHARS = {
     hairStyle: 'glasses', hue: '#9B59B6',
     quips: ['🎹 NICE!', '😎 WILL!', '💜 YES!', '🎯 PERFECT!'],
     ability: 'DEEP RANGE', abilityEmoji: '🔭',
-    _3ptBonus: 0.08, _spd: 0.95, _stealBonus: 0
+    _3ptBonus: 0.08, _spd: 0.95, _stealBonus: 0, _h: 150
   }
 };
 let TEAM_A_IDS = ['nara', 'ethan'];
@@ -624,7 +624,7 @@ function drawChar(id, hasBall) {
   if (lean) ctx.rotate(lean);
 
   if (spr && spr.complete && spr.naturalWidth > 0) {
-    const H = 175;
+    const H = CHARS[id]._h || 175;
     const W = H * spr.naturalWidth / spr.naturalHeight;
     ctx.drawImage(spr, -W / 2, -H, W, H);
   }
@@ -647,7 +647,8 @@ function drawChar(id, hasBall) {
   ctx.restore();
 }
 
-function drawCharOverlay(id) {
+function drawCharOverlay(id) { /* all features baked into sprites via PIL */ }
+function _drawCharOverlay_RETIRED(id) {
   if (id === 'ethan') {
     // Neck skin patch (fixes any PIL transparency from old deployed sprite)
     ctx.fillStyle = '#C68642';
@@ -1036,7 +1037,7 @@ function spawnThought(id, text) {
   const isBad  = /MISS|EARLY|LATE|AIR BALL|TOO FAR/.test(text);
   const bg = isGood ? '#E8FFE8EE' : isBad ? '#FFE8E8EE' : '#FFFFFAEE';
   S.thoughts.push({
-    x: p.x, y: p.y + p.jumpY - 158,
+    x: p.x, y: 52,
     text, ttl: 90, maxTtl: 90,
     dx: (Math.random() - 0.5) * 0.5,
     bg,
@@ -1867,7 +1868,7 @@ function drawCharSprite(id, anim, f) {
   ctx.translate(0, bob);
   ctx.scale(scX, scY);
   if (spr && spr.complete && spr.naturalWidth > 0) {
-    const H = 175;
+    const H = CHARS[id]._h || 175;
     const W = H * spr.naturalWidth / spr.naturalHeight;
     ctx.drawImage(spr, -W / 2, -H, W, H);
   }
@@ -3850,7 +3851,7 @@ function updateThoughts() {
   for (let i = S.thoughts.length - 1; i >= 0; i--) {
     S.thoughts[i].ttl--;
     S.thoughts[i].x += S.thoughts[i].dx;
-    S.thoughts[i].y -= 0.4;
+    S.thoughts[i].y = Math.max(30, S.thoughts[i].y - 0.15);
     if (S.thoughts[i].ttl <= 0) S.thoughts.splice(i, 1);
   }
 }
