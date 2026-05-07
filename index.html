@@ -2200,6 +2200,13 @@ function releaseShoot() {
   S.shotClock = 600;
   S.stats.shots++;
 
+  // Game winner shot: big moment label
+  const isGamePointShot = !S._deuceActive && S.score[0] === WIN_SCORE - 1;
+  const isDeuceMatchPt = S._deuceActive && S.score[0] > S.score[1];
+  if ((isGamePointShot || isDeuceMatchPt) && (inGreen || isPerfect)) {
+    S.thoughts.push({ x: GW / 2, y: 380, text: '🏆 FOR THE WIN!', ttl: 55, maxTtl: 55, dx: 0, bg: '#FFD700CC' });
+  }
+
   const made = Math.random() < acc;
   ap.anim = 'shoot';
   ap.hasBall = false;
@@ -2827,19 +2834,24 @@ function scorePoint() {
     : S.score[1] >= WIN_SCORE;
 
   if (aWins || bWins) {
-    // Nara's moment: Nara hits the game-winner
-    if (aWins && scorer === 'nara') {
-      setTimeout(() => sfxGuitarStrum(), 200);
-      spawnThought('nara', '🎸 GAME WINNER!');
-    }
-    // Special win message for deuce winner
-    if (aWins && S._deuceActive) {
-      S.scoreFlash = { text: '🏆 GAME WINNER!!!', color: '#FFD700', ttl: 150 };
+    // Full mega celebration for any human win
+    if (aWins) {
+      S.scoreFlash = { text: S._deuceActive ? '🏆 GAME WINNER!!!' : '🏆 NARA\'S ROOM WINS!', color: '#FFD700', ttl: 150 };
       sfxVictoryFanfare();
+      S.shake = 22;
       // Mega confetti burst
-      for (let ci = 0; ci < 80; ci++) {
-        S.confetti.push({ x: Math.random() * GW, y: GH * 0.3 + Math.random() * GH * 0.3, vx: (Math.random()-0.5)*10, vy: -Math.random()*12 - 3, color: ['#FFD700','#FF69B4',CHARS.nara.hue,'#FFF','#00CFFF'][ci % 5], size: 5 + Math.random()*6, ttl: 90 + Math.random()*60, rot: Math.random()*Math.PI*2, dRot: (Math.random()-0.5)*0.4 });
+      for (let ci = 0; ci < 90; ci++) {
+        S.confetti.push({ x: Math.random() * GW, y: GH * 0.25 + Math.random() * GH * 0.45, vx: (Math.random()-0.5)*11, vy: -Math.random()*13 - 4, color: ['#FFD700','#FF69B4',CHARS.nara.hue,'#FFF','#00CFFF','#32CD32'][ci % 6], size: 5 + Math.random()*7, ttl: 100 + Math.random()*60, rot: Math.random()*Math.PI*2, dRot: (Math.random()-0.5)*0.4 });
       }
+      spawnCrowdBurst([CHARS.nara.hue, '#FFD700', '#FFF', CHARS.ethan.hue, '#FF69B4']);
+    }
+    // Scorer-specific game-winner callout
+    if (aWins && scorer === 'nara') {
+      setTimeout(() => sfxGuitarStrum(), 250);
+      setTimeout(() => sfxGuitarStrum(), 600);
+      spawnThought('nara', '🎸 GAME WINNER!');
+    } else if (aWins && scorer === 'ethan') {
+      spawnThought('ethan', '🙌 ETHAN WINS IT!');
     }
     setTimeout(() => {
       S.screen = 'gameover';
