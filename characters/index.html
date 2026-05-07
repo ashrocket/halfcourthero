@@ -108,26 +108,31 @@ function next(delta) {
 
 function layout() {
   const dpr = window.devicePixelRatio || 1;
-  const floor = H * 0.72;
-  const sideY = H * 0.73;
   const dotW = Math.min(120 * dpr, W * 0.17);
   const gap = Math.max(14 * dpr, W * 0.025);
-  const dotY = H - 60 * dpr;
-  const summaryY = dotY - 86 * dpr;
+  const dotY = H - 66 * dpr;
+  const summaryH = 74 * dpr;
+  const summaryY = dotY - 118 * dpr;
+  const labelY = summaryY - 108 * dpr;
+  const floor = Math.min(H * 0.67, labelY - 62 * dpr);
+  const sideY = floor + 8 * dpr;
+  const topClear = 170 * dpr;
+  const maxBodyH = Math.max(210 * dpr, floor - topClear);
   return {
     dpr,
     cx: W * 0.5,
     floor,
     sideY,
-    bodyH: Math.min(H * 0.50, W * 0.72),
-    sideH: Math.min(H * 0.38, W * 0.2),
+    bodyH: Math.min(H * 0.46, W * 0.62, maxBodyH),
+    sideH: Math.min(H * 0.34, W * 0.18),
     leftX: W * 0.18,
     rightX: W * 0.82,
-    labelY: summaryY - 58 * dpr,
+    labelY,
     summaryY,
+    summaryH,
     dotY,
     dotW,
-    dotH: 34 * dpr,
+    dotH: 38 * dpr,
     gap,
   };
 }
@@ -242,39 +247,46 @@ function drawName(c, y, selectedStyle = true) {
   ctx.save();
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.font = `900 ${28 * dpr}px Courier New, monospace`;
+  ctx.font = `900 ${34 * dpr}px Courier New, monospace`;
+  ctx.shadowColor = 'rgba(0,0,0,0.75)';
+  ctx.shadowBlur = 8 * dpr;
   ctx.fillStyle = selectedStyle ? c.hue : '#ffffff75';
   ctx.fillText(c.name, W / 2, y);
-  ctx.font = `800 ${13 * dpr}px Courier New, monospace`;
-  ctx.fillStyle = '#ffffff65';
+  ctx.shadowBlur = 0;
+  ctx.font = `900 ${15 * dpr}px Courier New, monospace`;
+  ctx.fillStyle = '#ffffffB8';
   ctx.fillText(c.role, W / 2, y + 32 * dpr);
   ctx.restore();
 }
 
 function drawSummary(c, y) {
   const dpr = window.devicePixelRatio || 1;
+  const l = layout();
   const boxW = Math.min(W * 0.82, 560 * dpr);
-  const boxH = 58 * dpr;
+  const boxH = l.summaryH;
   const x = W / 2 - boxW / 2;
   const top = y - boxH / 2;
 
   ctx.save();
   roundedRect(x, top, boxW, boxH, 10 * dpr);
-  ctx.fillStyle = 'rgba(0,0,0,0.48)';
-  ctx.strokeStyle = c.hue + 'AA';
-  ctx.lineWidth = 1.5 * dpr;
+  ctx.fillStyle = 'rgba(0,0,0,0.72)';
+  ctx.strokeStyle = c.hue;
+  ctx.lineWidth = 2 * dpr;
+  ctx.shadowColor = 'rgba(0,0,0,0.6)';
+  ctx.shadowBlur = 10 * dpr;
   ctx.fill();
+  ctx.shadowBlur = 0;
   ctx.stroke();
 
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.font = `900 ${13 * dpr}px Courier New, monospace`;
+  ctx.font = `900 ${16 * dpr}px Courier New, monospace`;
   ctx.fillStyle = c.hue;
-  ctx.fillText(c.ability, W / 2, y - 12 * dpr, boxW - 28 * dpr);
+  ctx.fillText(c.ability, W / 2, y - 17 * dpr, boxW - 28 * dpr);
 
-  ctx.font = `700 ${10 * dpr}px Courier New, monospace`;
-  ctx.fillStyle = 'rgba(255,255,255,0.72)';
-  ctx.fillText(c.summary, W / 2, y + 13 * dpr, boxW - 28 * dpr);
+  ctx.font = `800 ${12.5 * dpr}px Courier New, monospace`;
+  ctx.fillStyle = 'rgba(255,255,255,0.86)';
+  ctx.fillText(c.summary, W / 2, y + 17 * dpr, boxW - 28 * dpr);
   ctx.restore();
 }
 
@@ -295,7 +307,7 @@ function drawDots() {
     ctx.fill();
     ctx.stroke();
     ctx.fillStyle = isActive ? '#12001d' : c.hue;
-    ctx.font = `900 ${11 * l.dpr}px Courier New, monospace`;
+    ctx.font = `900 ${13 * l.dpr}px Courier New, monospace`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(c.name, x + dotW / 2, l.dotY);
