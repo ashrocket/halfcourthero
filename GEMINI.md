@@ -16,7 +16,7 @@ The game is a direct tie-in to the "Nara's Room - Lizzie McGuire" official music
 - **Game Mechanics:** 
   - **Shooting:** Uses a timing-based "shot ring" mechanic for accuracy.
   - **Defense:** Includes both blocking and stealing mechanics.
-  - **AI:** Team B (Brendan & James) is controlled by a state-based AI that drives to the hoop and shoots.
+  - **NPC Behavior:** Team B (Brendan & James) is controlled by a state-based system that drives to the hoop and shoots.
   - **Controls:** Multi-modal support (Touch, Keyboard `Arrow/WASD + Z/X`, and Mouse).
 - **Architecture:** 
   - Centralized state management via a global object `S`.
@@ -34,8 +34,8 @@ The game is a direct tie-in to the "Nara's Room - Lizzie McGuire" official music
 ### Opportunities for Improvement
 1. **Audio Integration:** The game lacks sound. Adding bubble-pop sounds for quips, a squeaky court sound, and a Y2K pop-rock soundtrack would complete the experience.
 2. **Physics Fidelity:** The ball-to-rim collision logic is somewhat rigid. Implementing more varied bounce vectors could make rebounds feel more natural.
-3. **AI Coordination:** Currently, AI teammates move independently. Adding basic "plays" (e.g., pick and roll or cutting to the basket) would increase difficulty.
-4. **Maintainability:** At 1,400+ lines, the single-file structure is reaching its limit. Refactoring into a modular structure (e.g., `physics.js`, `render.js`, `ai.js`) would benefit future expansion.
+3. **Bot Coordination:** Currently, NPC teammates move independently. Adding basic "plays" (e.g., pick and roll or cutting to the basket) would increase difficulty.
+4. **Maintainability:** At 1,400+ lines, the single-file structure is reaching its limit. Refactoring into a modular structure (e.g., `physics.js`, `render.js`, `cpu.js`) would benefit future expansion.
 
 ## Repository Structure
 - `index.html`: The core game logic and UI.

@@ -303,8 +303,8 @@ function mkPlayer(id, team, x, facing) {
     jumpY: 0, _jumpVy: 0,
     anim: 'idle', facing,
     hasBall: false,
-    ai: team === 'b',
-    aiTimer: Math.random() * 60,
+    cpu: team === 'b',
+    cpuTimer: Math.random() * 60,
     landStartFrame: 0,
   };
 }
@@ -384,6 +384,7 @@ function initState() {
 
     // Onboarding
     onboardingTimer: 180, // ~3 seconds at 60fps
+    easyMode: true,       // Defaulting to true for easier initial testing
   };
 
   S.players[TEAM_A_IDS[0]].hasBall = true;
@@ -539,7 +540,7 @@ function drawChar(id, hasBall) {
     scY = 1 - Math.sin(phase) * 0.012;
   } else if (anim === 'run') {
     const phase = f * 0.20;
-    const intensity = p.ai ? 0.75 : Math.min(1, Math.hypot(p.vx, p.vy) / 3.5);
+    const intensity = p.cpu ? 0.75 : Math.min(1, Math.hypot(p.vx, p.vy) / 3.5);
     bobY = -Math.abs(Math.sin(phase)) * 5 * intensity;
     lean = Math.sin(phase) * 0.06 * intensity;
     const sq = Math.cos(phase);
@@ -1238,6 +1239,42 @@ function drawSwitchFlash() {
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.letterSpacing = '0.1em';
   ctx.fillText('NOW: ' + S.switchFlash.name, GW / 2, GH / 2 - 40);
+  ctx.restore();
+}
+
+function drawEasyModeOverlay() {
+  if (!S.easyMode || !S.shootHeld || S.possession !== 'a') return;
+  
+  const power = S.shootPower;
+  const inGreen = power >= POWER_GREEN_LO && power <= POWER_GREEN_HI;
+  const isPerfect = power >= 60 && power <= 68;
+  const isRed = power > POWER_GREEN_HI;
+  
+  let color = 'rgba(255, 200, 0, 0.4)'; // Yellow
+  if (isPerfect) color = 'rgba(255, 255, 255, 0.5)';
+  else if (inGreen) color = 'rgba(0, 255, 136, 0.45)';
+  else if (isRed) color = 'rgba(255, 68, 68, 0.4)';
+
+  // Calculate fill height
+  const fillH = (power / 100) * GH;
+
+  ctx.save();
+  ctx.fillStyle = color;
+  // Fill from bottom up
+  ctx.fillRect(0, GH - fillH, GW, fillH);
+  
+  ctx.fillStyle = '#FFF';
+  ctx.font = 'bold 28px monospace';
+  ctx.textAlign = 'center';
+  ctx.shadowBlur = 12;
+  ctx.shadowColor = '#000';
+  
+  let label = 'CHARGING...';
+  if (isPerfect) label = '✨ PERFECT! ✨';
+  else if (inGreen) label = 'RELEASE NOW!';
+  else if (isRed) label = 'TOO LATE!';
+  
+  ctx.fillText(label, GW / 2, GH / 2);
   ctx.restore();
 }
 
@@ -2340,10 +2377,15 @@ function releaseShoot() {
   const isPerfect = power >= 60 && power <= 68;
 
   let acc, timingText;
-  if (isPerfect)        { acc = 0.95; timingText = isChefCurry ? '🍳 PERFECT!' : '🎯 PERFECT!'; }
-  else if (inGreen)     { acc = 0.88; timingText = isChefCurry ? '🍳 COOKING!' : '💚 GOOD!'; }
-  else if (power < POWER_GREEN_LO) { acc = 0.12 + power * 0.006; timingText = '⬆ EARLY'; }
-  else                  { acc = 0.32; timingText = '⬇ LATE'; }
+  if (S.easyMode) {
+    if (isPerfect || inGreen) { acc = 1.0; timingText = '🎯 PERFECT!'; }
+    else { acc = 0.0; timingText = power < greenLo ? '⬆ EARLY' : '⬇ LATE'; }
+  } else {
+    if (isPerfect)        { acc = 0.95; timingText = isChefCurry ? '🍳 PERFECT!' : '🎯 PERFECT!'; }
+    else if (inGreen)     { acc = 0.88; timingText = isChefCurry ? '🍳 COOKING!' : '💚 GOOD!'; }
+    else if (power < greenLo) { acc = 0.12 + power * 0.006; timingText = '⬆ EARLY'; }
+    else                  { acc = 0.32; timingText = '⬇ LATE'; }
+  }
 
   // Layup / dunk near basket — higher accuracy, override text
   if (dist < 70) {
@@ -3270,7 +3312,7 @@ function updatePlayers() {
   }
 
   if (S.possession === 'a') {
-    updateAIDefense();
+    updateCPUDefense();
     const ap  = S.players[S.activeHuman];
     if (S._fastBreak > 0) S._fastBreak--;
 
@@ -3419,7 +3461,7 @@ function updatePlayers() {
 
   } else {
     // CPU offense
-    updateAI();
+    updateCPUBehavior();
     // Human defends — inertia movement (same feel as offense)
     const ap  = S.players[S.activeHuman];
     const spd = 3.2;
@@ -3468,15 +3510,15 @@ function updatePlayers() {
   }
 }
 
-// ── AI Logic ──────────────────────────────────────────────────────
-function updateAIDefense() {
+// ── NPC Logic ──────────────────────────────────────────────────────
+function updateCPUDefense() {
   // CPU team B defends while human has the ball
   const brendan = S.players[TEAM_B_IDS[0]];
   const james   = S.players[TEAM_B_IDS[1]];
   const carrier = S.players[S.activeHuman];
 
-  brendan.aiTimer++;
-  james.aiTimer++;
+  brendan.cpuTimer++;
+  james.cpuTimer++;
 
   // Ankle stun: frozen after ankle-breaker
   if (brendan._ankleStun > 0) { brendan._ankleStun--; return; }
@@ -3587,21 +3629,21 @@ function updateAIDefense() {
   if (Math.abs(jDy) > 8) james.y += Math.sign(jDy) * 1.2;
   james.y = Math.max(COURT_FAR_Y, Math.min(COURT_NEAR_Y, james.y));
 
-  // AI jump-block when human is charging shot
+  // NPC jump-block when human is charging shot
   if (S.shootHeld && S.shootPower > 25) {
     const distJ = Math.hypot(carrier.x - james.x, carrier.y - james.y);
     const nearest = distToBrendan < distJ ? brendan : james;
-    if (nearest._jumpVy === 0 && nearest.jumpY === 0 && nearest.aiTimer > 30) {
-      nearest.aiTimer = 0;
+    if (nearest._jumpVy === 0 && nearest.jumpY === 0 && nearest.cpuTimer > 30) {
+      nearest.cpuTimer = 0;
       nearest._jumpVy = -9;
       nearest.anim = 'jump';
     }
   }
 
-  // AI steal attempt when Brendan is close — higher rate when double-teaming
+  // NPC steal attempt when Brendan is close — higher rate when double-teaming
   const bothNear = distToBrendan < 55 && Math.hypot(carrier.x - james.x, carrier.y - james.y) < 60;
-  if (distToBrendan < 55 && brendan.aiTimer > 60) {
-    brendan.aiTimer = 0;
+  if (distToBrendan < 55 && brendan.cpuTimer > 60) {
+    brendan.cpuTimer = 0;
     const baseRate = S._difficulty === 'easy' ? 0.10 : S._difficulty === 'hard' ? 0.32 : 0.20;
     const stealRate = bothNear ? Math.min(baseRate * 1.5, 0.60) : baseRate; // double-team = easier steal
     const success = Math.random() < stealRate;
@@ -3617,8 +3659,8 @@ function updateAIDefense() {
 
   // James swipe attempt when carrier drives into paint
   const distToJames = Math.hypot(carrier.x - james.x, carrier.y - james.y);
-  if (distToJames < 48 && james.aiTimer > 75 && carrier.x > HOOP_X - 100 && carrier.hasBall) {
-    james.aiTimer = 0;
+  if (distToJames < 48 && james.cpuTimer > 75 && carrier.x > HOOP_X - 100 && carrier.hasBall) {
+    james.cpuTimer = 0;
     const jStealRate = S._difficulty === 'easy' ? 0.05 : S._difficulty === 'hard' ? 0.18 : 0.10;
     if (Math.random() < jStealRate) {
       carrier.hasBall = false;
@@ -3631,12 +3673,12 @@ function updateAIDefense() {
   }
 }
 
-function updateAI() {
+function updateCPUBehavior() {
   const brendan = S.players[TEAM_B_IDS[0]];
   const james   = S.players[TEAM_B_IDS[1]];
 
-  brendan.aiTimer++;
-  james.aiTimer++;
+  brendan.cpuTimer++;
+  james.cpuTimer++;
 
   if (brendan.hasBall) {
     brendan.facing = brendan.x < HOOP_X ? 1 : -1;
@@ -3646,8 +3688,8 @@ function updateAI() {
     const driveProb = onFastBreak ? 0.08 : diff === 'hard' ? 0.006 : diff === 'easy' ? 0.001 : 0.003;
     const threeProb = diff === 'hard' ? 0.004 : 0;
     const shootChance = Math.random() < driveProb;
-    if (shootChance && brendan.aiTimer > 20) { brendan._willShoot = true; brendan._willThree = false; }
-    if (!brendan._willShoot && Math.random() < threeProb && brendan.aiTimer > 20) {
+    if (shootChance && brendan.cpuTimer > 20) { brendan._willShoot = true; brendan._willThree = false; }
+    if (!brendan._willShoot && Math.random() < threeProb && brendan.cpuTimer > 20) {
       brendan._willShoot = true; brendan._willThree = true;
     }
     const targetX = brendan._willThree ? HOOP_X - 215 : brendan._willShoot ? HOOP_X - 30 : HOOP_X - 80;
@@ -3663,13 +3705,13 @@ function updateAI() {
     const bOffY = brendan._willShoot ? COURT_FAR_Y + 4 : COURT_FAR_Y + 18;
     if (Math.abs(brendan.y - bOffY) > 6) brendan.y += Math.sign(bOffY - brendan.y) * 1.2;
 
-    if (brendan._willShoot && (Math.abs(brendan.x - targetX) < 15 || brendan.aiTimer > 80)) {
+    if (brendan._willShoot && (Math.abs(brendan.x - targetX) < 15 || brendan.cpuTimer > 80)) {
       brendan._willShoot = false;
       brendan._willThree = false;
-      brendan.aiTimer = 0;
-      aiShoot(brendan);
-    } else if (!brendan._willShoot && brendan.aiTimer > 45 + Math.random() * 30) {
-      brendan.aiTimer = 0;
+      brendan.cpuTimer = 0;
+      cpuShoot(brendan);
+    } else if (!brendan._willShoot && brendan.cpuTimer > 45 + Math.random() * 30) {
+      brendan.cpuTimer = 0;
       // CPU alley-oop: James near basket, no human defenders in paint
       const jamesNearBasket = james.x > HOOP_X - 55;
       const humanInPaint = TEAM_A_IDS.some(id => S.players[id].x > HOOP_X - 60);
@@ -3707,7 +3749,7 @@ function updateAI() {
     james.facing = james.x < HOOP_X ? 1 : -1;
     const diff = S._difficulty || 'normal';
     // James sometimes steps back for a 3, drives, or posts up
-    if (!james._driving && !james._goingThree && !james._postUp && james.aiTimer > 20) {
+    if (!james._driving && !james._goingThree && !james._postUp && james.cpuTimer > 20) {
       const threeChance = diff === 'hard' ? 0.007 : diff === 'easy' ? 0.001 : 0.003;
       if (Math.random() < threeChance) james._goingThree = true;
       else if (Math.random() < 0.004) james._driving = true;
@@ -3723,18 +3765,18 @@ function updateAI() {
       james._driving = false;
       // James shoots after positioning — sometimes pump fakes first; post-up has lower timer
       const jTimer = james._postUp ? 35 : 55 + Math.random() * 40;
-      if (james.aiTimer > jTimer) {
+      if (james.cpuTimer > jTimer) {
         if (!james._faked && !james._goingThree && !james._postUp && Math.random() < 0.35) {
           james._faked = true;
           james.anim = 'shoot';
-          james.aiTimer = 30;
+          james.cpuTimer = 30;
           spawnThought(TEAM_B_IDS[1], '😏');
         } else {
           james._faked = false;
           james._goingThree = false;
           james._postUp = false;
-          james.aiTimer = 0;
-          aiShoot(james);
+          james.cpuTimer = 0;
+          cpuShoot(james);
         }
       }
     }
@@ -3768,7 +3810,7 @@ function updateAI() {
   }
 }
 
-function aiShoot(p) {
+function cpuShoot(p) {
   const dist = Math.abs(p.x - HOOP_X);
   const diffMult = S._difficulty === 'easy' ? 0.55 : S._difficulty === 'hard' ? 1.35 : 1.0;
   // Mercy mode: ease off when CPU leads by 5+
@@ -4235,6 +4277,7 @@ function loop() {
 
   drawControls();
   drawOnboarding();
+  drawEasyModeOverlay();
 
   // Pass arrow + OPEN/LOBB indicator when teammate is unguarded
   if (S.possession === 'a') {
@@ -4312,5 +4355,6 @@ function loop() {
 initState();
 loop();
 </script>
+<a href="https://bandmusicgames.party" style="position:fixed;bottom:16px;right:16px;z-index:9999;padding:8px 16px;background:linear-gradient(135deg,#a855f7,#ec4899);color:#fff;border-radius:20px;font-size:11px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-weight:700;letter-spacing:0.1em;text-decoration:none;box-shadow:0 4px 12px rgba(168,85,247,0.4);">← LOBBY</a>
 </body>
 </html>
