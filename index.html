@@ -1770,7 +1770,16 @@ function drawTitle() {
   ctx.fillStyle = `rgba(255,255,255,${tapAlpha})`;
   ctx.font = 'bold 14px monospace'; ctx.textAlign = 'center';
   ctx.letterSpacing = '0.25em';
-  ctx.fillText('TAP TO PLAY', GW / 2, titleBest.wins > 0 ? 470 : 465);
+  const tapY = titleBest.wins > 0 ? 470 : 465;
+  ctx.fillText('TAP TO PLAY', GW / 2, tapY);
+
+  // MEET THE BAND button
+  const btnY = tapY + 25;
+  fillRR(GW / 2 - 60, btnY, 120, 26, 8, 'rgba(0,0,0,0.4)', '#FFD700', 1.5);
+  ctx.fillStyle = '#FFD700';
+  ctx.font = 'bold 10px monospace';
+  ctx.letterSpacing = '0.1em';
+  ctx.fillText('MEET THE BAND', GW / 2, btnY + 14);
 
   ctx.fillStyle = 'rgba(255,255,255,0.2)';
   ctx.font = '9px monospace'; ctx.letterSpacing = '0.15em';
@@ -2077,6 +2086,14 @@ canvas.addEventListener('touchstart', e => {
     if (S.showInfo) { S.showInfo = false; continue; }
 
     if (S.screen === 'title') {
+      // MEET THE BAND button: GW/2-60, btnY, 120, 26. btnY = tapY + 25. tapY = 470 or 465.
+      const tapY = (JSON.parse(localStorage.getItem('halfcourt_stats') || '{}').wins || 0) > 0 ? 470 : 465;
+      const btnY = tapY + 25;
+      if (x >= GW/2 - 60 && x <= GW/2 + 60 && y >= btnY && y <= btnY + 26) {
+        window.location.href = './characters/';
+        return;
+      }
+      
       // Difficulty buttons: drawn at bx=90, bx=162, bx=234 each 64px wide
       if (y >= 405 && y <= 440) {
         if (x >= 85  && x < 158) { S._difficulty = 'easy';   continue; }
@@ -2268,8 +2285,17 @@ canvas.addEventListener('mousedown', e => {
   if (S.paused) { S.paused = false; return; }
   if (Math.hypot(x - 374, y - 14) < 18) { S.showInfo = !S.showInfo; return; }
   if (S.showInfo) { S.showInfo = false; return; }
-  if (S.screen === 'title' || S.screen === 'gameover') {
-    if (S.screen === 'gameover') initState();
+  if (S.screen === 'title') {
+    const tapY = (JSON.parse(localStorage.getItem('halfcourt_stats') || '{}').wins || 0) > 0 ? 470 : 465;
+    const btnY = tapY + 25;
+    if (x >= GW/2 - 60 && x <= GW/2 + 60 && y >= btnY && y <= btnY + 26) {
+      window.location.href = './characters/';
+      return;
+    }
+    S._charSelectStep = 1; S.screen = 'charselect'; return;
+  }
+  if (S.screen === 'gameover') {
+    initState();
     S._charSelectStep = 1; S.screen = 'charselect'; return;
   }
   if (S.screen === 'charselect') {
