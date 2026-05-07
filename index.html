@@ -1840,11 +1840,11 @@ function drawTitle() {
   }
 
   ctx.fillStyle = 'rgba(220, 140, 50, 0.15)';
-  ctx.fillRect(0, 400, GW, 200);
+  ctx.fillRect(0, 540, GW, 210);
 
   ctx.save();
   const tsc = 1 + Math.sin(S.frame * 0.04) * 0.02;
-  ctx.translate(GW / 2, 90);
+  ctx.translate(GW / 2, 290);
   ctx.scale(tsc, tsc);
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
 
@@ -1856,67 +1856,11 @@ function drawTitle() {
   ctx.fillStyle = '#FF1493';
   ctx.font = 'bold 44px monospace';
   ctx.letterSpacing = '0.05em';
-  ctx.fillText('HALF', 0, 44);
-  ctx.fillText('COURT', 0, 88);
+  ctx.fillText('HALF', 0, 50);
+  ctx.fillText('COURT', 0, 100);
   ctx.fillStyle = '#FFFFFF';
-  ctx.fillText('HERO', 0, 132);
+  ctx.fillText('HERO', 0, 150);
   ctx.restore();
-
-  const lineup    = ['nara', 'ethan', 'brendan', 'will'];
-  const positions = [50, 148, 246, 344];
-  for (let i = 0; i < lineup.length; i++) {
-    const id  = lineup[i];
-    const cx  = positions[i];
-    const d   = CHARS[id];
-    const bob = Math.sin(S.frame * 0.04 + i * 1.2) * 4;
-
-    ctx.save();
-    ctx.translate(cx, 310 + bob);
-
-    const team = i < 2 ? 0 : 1;
-    ctx.shadowColor = team === 0 ? CHARS.nara.hue : CHARS.brendan.hue;
-    ctx.shadowBlur = 16;
-
-    const f = S.players[lineup[i]] ? S.players[lineup[i]].facing : (i < 2 ? 1 : -1);
-    if (f < 0) ctx.scale(-1, 1);
-    drawCharSprite(id, 'idle', S.frame + i * 30);
-    ctx.restore();
-
-    const nameX = cx;
-    fillRR(nameX - 39, 316, 78, 34, 7, 'rgba(0,0,0,0.65)', d.hue, 2);
-    ctx.fillStyle = d.hue;
-    ctx.font = 'bold 11px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(d.name, nameX, 328);
-    ctx.fillStyle = 'rgba(255,255,255,0.55)';
-    ctx.font = 'bold 8px monospace'; ctx.letterSpacing = '0';
-    ctx.fillText(d.role.split(' ')[0], nameX, 343);
-  }
-
-  // Team headers above characters
-  ctx.fillStyle = CHARS.nara.hue;
-  ctx.font = 'bold 12px monospace'; ctx.textAlign = 'center'; ctx.letterSpacing = '0';
-  ctx.fillText('YOUR TEAM', GW / 4, 268);
-  ctx.fillStyle = CHARS.brendan.hue;
-  ctx.fillText('CPU TEAM', (GW * 3) / 4, 268);
-
-  ctx.fillStyle = 'rgba(255,255,255,0.5)';
-  ctx.fillRect(GW / 2 - 1, 270, 2, 80);
-  ctx.font = 'bold 20px monospace'; ctx.textAlign = 'center';
-  ctx.fillText('VS', GW / 2, 316);
-
-  // Difficulty buttons
-  const diff = S._difficulty || 'normal';
-  const diffBtns = [['easy','EASY','#32CD32'],['normal','NORMAL','#FFD700'],['hard','HARD','#FF4444']];
-  let bx = GW / 2 - 126;
-  for (const [key, label, color] of diffBtns) {
-    const sel = diff === key;
-    fillRR(bx, 406, 76, 34, 10, sel ? color : 'rgba(0,0,0,0.4)', sel ? '#FFF' : color, sel ? 2.5 : 2);
-    ctx.fillStyle = sel ? '#111' : color;
-    ctx.font = (sel ? 'bold ' : '') + '13px monospace';
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.letterSpacing = '0';
-    ctx.fillText(label, bx + 38, 423);
-    bx += 88;
-  }
 
   // Career wins from localStorage
   let titleBest = {};
@@ -1927,18 +1871,18 @@ function drawTitle() {
     const extras = [];
     if (titleBest.deuceWins > 0) extras.push(`⚖️×${titleBest.deuceWins}`);
     if (titleBest.comebacks > 0) extras.push(`💪×${titleBest.comebacks}`);
-    ctx.fillText('🏆 RECORD: ' + wl + (extras.length ? '   ' + extras.join(' ') : ''), GW / 2, 450);
+    ctx.fillText('🏆 RECORD: ' + wl + (extras.length ? '   ' + extras.join(' ') : ''), GW / 2, 520);
   }
 
   // Bouncing basketball animation in title
   const ballBounceT = S.frame * 0.08;
   const bbX = GW / 2 + Math.sin(ballBounceT * 0.6) * 130;
-  const bbY = 225 + Math.abs(Math.sin(ballBounceT)) * 40;
+  const bbY = 155 + Math.abs(Math.sin(ballBounceT)) * 40;
   const bbShadowR = 6 + Math.abs(Math.sin(ballBounceT)) * 3;
   ctx.save();
   ctx.globalAlpha = 0.35;
   ctx.fillStyle = 'rgba(0,0,0,0.3)';
-  ctx.beginPath(); ctx.ellipse(bbX, 270, bbShadowR, 3, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(bbX, 200, bbShadowR, 3, 0, 0, Math.PI * 2); ctx.fill();
   ctx.rotate(ballBounceT * 1.5);
   ctx.globalAlpha = 0.5;
   drawBallAt(bbX, bbY, 11);
@@ -1948,16 +1892,7 @@ function drawTitle() {
   ctx.fillStyle = `rgba(255,255,255,${tapAlpha})`;
   ctx.font = 'bold 20px monospace'; ctx.textAlign = 'center';
   ctx.letterSpacing = '0.18em';
-  const tapY = titleBest.wins > 0 ? 470 : 465;
-  ctx.fillText('TAP TO PLAY', GW / 2, tapY);
-
-  // MEET THE BAND button
-  const btnY = tapY + 35;
-  fillRR(GW / 2 - 82, btnY, 164, 36, 10, 'rgba(0,0,0,0.4)', '#FFD700', 2);
-  ctx.fillStyle = '#FFD700';
-  ctx.font = 'bold 13px monospace';
-  ctx.letterSpacing = '0.08em';
-  ctx.fillText('MEET THE BAND', GW / 2, btnY + 19);
+  ctx.fillText('TAP TO PLAY', GW / 2, 590);
 
   ctx.fillStyle = 'rgba(255,255,255,0.3)';
   ctx.font = 'bold 11px monospace'; ctx.letterSpacing = '0.12em';
@@ -1980,7 +1915,7 @@ function drawCharSelect() {
   if (step === 1) {
     ctx.fillStyle = '#FFD700';
     ctx.font = 'bold 18px monospace'; ctx.letterSpacing = '0.12em';
-    ctx.fillText('PICK YOUR PLAYER', 0, 0);
+    ctx.fillText('MEET THE TEAM', 0, 0);
   } else {
     ctx.fillStyle = CHARS[chosen].hue;
     ctx.font = 'bold 14px monospace'; ctx.letterSpacing = '0.1em';
@@ -1993,7 +1928,7 @@ function drawCharSelect() {
 
   const all = ['nara', 'ethan', 'brendan', 'will'];
   const CX  = [50, 148, 246, 344];
-  const CY  = 330;
+  const CY  = 390;
 
   for (let i = 0; i < 4; i++) {
     const id  = all[i];
@@ -2035,11 +1970,28 @@ function drawCharSelect() {
   // Team divider on step 1
   if (step === 1) {
     ctx.fillStyle = 'rgba(255,255,255,0.35)';
-    ctx.fillRect(GW / 2 - 1, 150, 2, 200);
+    ctx.fillRect(GW / 2 - 1, 150, 2, 260);
     ctx.fillStyle = 'rgba(255,255,255,0.25)';
     ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center'; ctx.letterSpacing = '0';
     ctx.fillText('YOUR TEAM', GW / 4, 148);
     ctx.fillText('CPU TEAM', GW * 3 / 4, 148);
+  }
+
+  // Difficulty buttons
+  const diff = S._difficulty || 'normal';
+  const diffBtns = [['easy','EASY','#32CD32'],['normal','NORMAL','#FFD700'],['hard','HARD','#FF4444']];
+  let dbx = GW / 2 - 126;
+  ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.font = 'bold 9px monospace';
+  ctx.textAlign = 'center'; ctx.letterSpacing = '0.12em';
+  ctx.fillText('DIFFICULTY', GW / 2, GH - 114);
+  for (const [key, label, color] of diffBtns) {
+    const sel = diff === key;
+    fillRR(dbx, GH - 104, 76, 30, 9, sel ? color : 'rgba(0,0,0,0.4)', sel ? '#FFF' : color, sel ? 2.5 : 2);
+    ctx.fillStyle = sel ? '#111' : color;
+    ctx.font = (sel ? 'bold ' : '') + '12px monospace';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.letterSpacing = '0';
+    ctx.fillText(label, dbx + 38, GH - 89);
+    dbx += 88;
   }
 
   // Tap hint
@@ -2272,20 +2224,6 @@ canvas.addEventListener('touchstart', e => {
     if (S.showInfo) { S.showInfo = false; continue; }
 
     if (S.screen === 'title') {
-      // MEET THE BAND button
-      const tapY = (JSON.parse(localStorage.getItem('halfcourt_stats') || '{}').wins || 0) > 0 ? 470 : 465;
-      const btnY = tapY + 35;
-      if (x >= GW/2 - 82 && x <= GW/2 + 82 && y >= btnY && y <= btnY + 36) {
-        window.location.href = './characters/';
-        return;
-      }
-      
-      // Difficulty buttons
-      if (y >= 402 && y <= 446) {
-        if (x >= 70  && x < 156) { S._difficulty = 'easy';   continue; }
-        if (x >= 156 && x < 244) { S._difficulty = 'normal'; continue; }
-        if (x >= 244 && x < 330) { S._difficulty = 'hard';   continue; }
-      }
       S._charSelectStep = 1; S.screen = 'charselect'; return;
     }
     if (S.screen === 'charselect') {
@@ -2295,8 +2233,14 @@ canvas.addEventListener('touchstart', e => {
       if (S._selectedPlayer && S._selectedTeammate && y >= GH - 46 && y <= GH - 6 && Math.abs(x - GW/2) <= 76) {
         startGameWithSelection(); return;
       }
+      // Difficulty buttons
+      if (y >= GH - 108 && y <= GH - 74) {
+        if (x >= 70  && x < 156) { S._difficulty = 'easy';   continue; }
+        if (x >= 156 && x < 244) { S._difficulty = 'normal'; continue; }
+        if (x >= 244 && x < 330) { S._difficulty = 'hard';   continue; }
+      }
       for (let _i = 0; _i < 4; _i++) {
-        if (Math.abs(x - _CX[_i]) <= 48 && y >= 140 && y <= 405) {
+        if (Math.abs(x - _CX[_i]) <= 48 && y >= 150 && y <= GH - 120) {
           const _id = _all[_i];
           if ((S._charSelectStep || 1) === 1) {
             S._selectedPlayer = _id; S._selectedTeammate = null; S._charSelectStep = 2;
@@ -2472,12 +2416,6 @@ canvas.addEventListener('mousedown', e => {
   if (Math.hypot(x - 374, y - 14) < 18) { S.showInfo = !S.showInfo; return; }
   if (S.showInfo) { S.showInfo = false; return; }
   if (S.screen === 'title') {
-    const tapY = (JSON.parse(localStorage.getItem('halfcourt_stats') || '{}').wins || 0) > 0 ? 470 : 465;
-    const btnY = tapY + 25;
-    if (x >= GW/2 - 60 && x <= GW/2 + 60 && y >= btnY && y <= btnY + 26) {
-      window.location.href = './characters/';
-      return;
-    }
     S._charSelectStep = 1; S.screen = 'charselect'; return;
   }
   if (S.screen === 'gameover') {
@@ -2490,8 +2428,13 @@ canvas.addEventListener('mousedown', e => {
     if (S._selectedPlayer && S._selectedTeammate && y >= GH - 39 && y <= GH - 11 && Math.abs(x - GW/2) <= 55) {
       startGameWithSelection(); return;
     }
+    if (y >= GH - 108 && y <= GH - 74) {
+      if (x >= 70  && x < 156) { S._difficulty = 'easy';   return; }
+      if (x >= 156 && x < 244) { S._difficulty = 'normal'; return; }
+      if (x >= 244 && x < 330) { S._difficulty = 'hard';   return; }
+    }
     for (let _i = 0; _i < 4; _i++) {
-      if (Math.abs(x - _CX[_i]) <= 48 && y >= 140 && y <= 405) {
+      if (Math.abs(x - _CX[_i]) <= 48 && y >= 150 && y <= GH - 120) {
         const _id = _all[_i];
         if ((S._charSelectStep || 1) === 1) {
           S._selectedPlayer = _id; S._selectedTeammate = null; S._charSelectStep = 2;
