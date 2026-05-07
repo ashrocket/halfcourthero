@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NARA — Nara's Room</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; background: #0a0010; overflow: hidden; font-family: 'Courier New', monospace; }
+  #stage { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  #cv { display: block; cursor: grab; }
+  #cv:active { cursor: grabbing; }
+  .name-block { position: absolute; top: 40px; left: 50%; transform: translateX(-50%); text-align: center; pointer-events: none; }
+  .char-name { font-size: clamp(32px, 6vw, 64px); font-weight: 900; letter-spacing: 0.12em; color: #FF1493; text-shadow: 0 0 30px #FF149380, 0 0 60px #FF149340; }
+  .char-role { font-size: clamp(12px, 2vw, 18px); letter-spacing: 0.3em; color: #FF69B4; opacity: 0.85; margin-top: 4px; }
+  .info-block { position: absolute; bottom: 48px; left: 50%; transform: translateX(-50%); text-align: center; pointer-events: none; }
+  .ability { font-size: clamp(11px, 1.8vw, 15px); letter-spacing: 0.25em; color: #FF1493; opacity: 0.75; }
+  .controls { position: absolute; bottom: 80px; right: 28px; display: flex; flex-direction: column; gap: 10px; }
+  .btn { width: 44px; height: 44px; border-radius: 50%; border: 2px solid #FF149360; background: rgba(255,20,147,0.12); color: #FF69B4; font-size: 22px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.15s, border-color 0.15s; user-select: none; }
+  .btn:hover { background: rgba(255,20,147,0.28); border-color: #FF1493; }
+  .back-btn { position: absolute; top: 36px; left: 28px; font-size: 13px; letter-spacing: 0.2em; color: #FF69B480; text-decoration: none; transition: color 0.15s; }
+  .back-btn:hover { color: #FF1493; }
+  .orbit-hint { position: absolute; bottom: 28px; left: 50%; transform: translateX(-50%); font-size: 11px; letter-spacing: 0.2em; color: #ffffff30; pointer-events: none; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="name-block">
+    <div class="char-name">NARA</div>
+    <div class="char-role">VOCALS · GUITAR</div>
+  </div>
+  <canvas id="cv"></canvas>
+  <div class="info-block">
+    <div class="ability">🎯 3PT SHOOTER · SPEED BOOST</div>
+  </div>
+  <div class="controls">
+    <div class="btn" id="zoomIn">+</div>
+    <div class="btn" id="zoomOut">−</div>
+  </div>
+  <a class="back-btn" href="/">← BACK TO GAME</a>
+  <div class="orbit-hint">DRAG TO ORBIT · SCROLL TO ZOOM</div>
+</div>
+
+<script>
+const CHAR_ID     = 'nara';
+const SPRITE_SRC  = '../assets/nara_sprite.png';
+const HUE         = '#FF1493';
+const SKIN        = '#FDBCB4';
+const HAIR        = '#1C0A00';
+const SHIRT       = '#222222';
+const PANTS       = '#3366DD';
+const SHOES       = '#2A2A2A';
+
+const canvas = document.getElementById('cv');
+const ctx    = canvas.getContext('2d');
+
+let W = 0, H = 0;
+let zoom = 1.0;
+const MIN_ZOOM = 0.4, MAX_ZOOM = 3.0;
+let orbitAngle = 0;
+let orbitSpeed = 0.008;
+let frame = 0;
+let dragging = false, lastX = 0;
+let orbitDragVel = 0;
+
+// Sprite
+const spr = new Image();
+spr.src = SPRITE_SRC;
+
+// Resize
+function resize() {
+  const dpr = window.devicePixelRatio || 1;
+  const sz = Math.min(window.innerWidth, window.innerHeight) * 0.72;
+  canvas.width  = sz * dpr;
+  canvas.height = sz * dpr;
+  canvas.style.width  = sz + 'px';
+  canvas.style.height = sz + 'px';
+  W = sz * dpr;
+  H = sz * dpr;
+}
+window.addEventListener('resize', resize);
+resize();
+
+// ── Overlay drawing (mirrors game's drawCharOverlay) ──────────────
+function drawOverlay(id) {
+  // Nara has no overlay — her look comes purely from sprite
+}
+
+// ── Draw one frame ────────────────────────────────────────────────
+function drawFrame() {
+  ctx.clearRect(0, 0, W, H);
+
+  const cx = W / 2, cy = H / 2;
+  const sprH = H * 0.58;
+
+  // Background glow
+  const grd = ctx.createRadialGradient(cx, cy + sprH * 0.1, 0, cx, cy, H * 0.55);
+  grd.addColorStop(0, HUE + '18');
+  grd.addColorStop(0.5, HUE + '08');
+  grd.addColorStop(1, 'transparent');
+  ctx.fillStyle = grd; ctx.fillRect(0, 0, W, H);
+
+  // Shadow ellipse on ground
+  const squish = Math.abs(Math.cos(orbitAngle));
+  const shadowAlpha = 0.22 + 0.12 * squish;
+  ctx.save();
+  ctx.translate(cx, cy + sprH * 0.52);
+  ctx.scale(squish * 0.9 + 0.1, 1);
+  ctx.beginPath();
+  ctx.ellipse(0, 0, sprH * 0.22, sprH * 0.05, 0, 0, Math.PI * 2);
+  ctx.fillStyle = `rgba(0,0,0,${shadowAlpha})`;
+  ctx.fill();
+  ctx.restore();
+
+  // Bob animation
+  const bob = Math.sin(frame * 0.045) * (H * 0.012);
+  const charY = cy + sprH * 0.5 + bob;
+
+  // Orbit — squish X to simulate turning
+  const facing = Math.cos(orbitAngle) >= 0 ? 1 : -1;
+  const xScale = Math.max(0.04, Math.abs(Math.cos(orbitAngle)));
+
+  ctx.save();
+  ctx.translate(cx, charY);
+  ctx.scale(zoom * xScale * facing, zoom);
+
+  // Draw sprite
+  if (spr.complete && spr.naturalWidth > 0) {
+    const sH = sprH;
+    const sW = sH * spr.naturalWidth / spr.naturalHeight;
+    ctx.drawImage(spr, -sW / 2, -sH, sW, sH);
+  }
+  drawOverlay(CHAR_ID);
+
+  ctx.restore();
+}
+
+// ── Animate ───────────────────────────────────────────────────────
+function tick() {
+  frame++;
+  if (!dragging) {
+    orbitAngle += orbitSpeed + orbitDragVel;
+    orbitDragVel *= 0.96;
+  }
+  drawFrame();
+  requestAnimationFrame(tick);
+}
+tick();
+
+// ── Zoom ──────────────────────────────────────────────────────────
+document.getElementById('zoomIn').addEventListener('click', () => { zoom = Math.min(MAX_ZOOM, zoom * 1.2); });
+document.getElementById('zoomOut').addEventListener('click', () => { zoom = Math.max(MIN_ZOOM, zoom / 1.2); });
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom * (e.deltaY > 0 ? 0.9 : 1.1)));
+}, { passive: false });
+
+// ── Drag to orbit ─────────────────────────────────────────────────
+canvas.addEventListener('pointerdown', e => { dragging = true; lastX = e.clientX; canvas.setPointerCapture(e.pointerId); });
+canvas.addEventListener('pointermove', e => {
+  if (!dragging) return;
+  const dx = e.clientX - lastX;
+  orbitAngle += dx * 0.012;
+  orbitDragVel = dx * 0.012;
+  lastX = e.clientX;
+});
+canvas.addEventListener('pointerup', () => { dragging = false; });
+</script>
+</body>
+</html>

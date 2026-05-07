@@ -741,6 +741,26 @@ function drawCharOverlay(id) {
     ctx.fillStyle = '#8A2510';
     ctx.beginPath(); ctx.ellipse(0, -122, 10, 5, 0, 0, Math.PI * 2); ctx.fill();
 
+    // Curly hair — draw BEFORE beanie so hat sits on top; ringlet clusters zigzag down sides
+    // Shadow pass
+    ctx.fillStyle = '#0C0806';
+    for (const [hx, hy, hr] of [
+      [-15,-148,7],[-22,-144,6],[-17,-137,7],[-22,-131,6.5],[-16,-125,6.5],[-21,-119,6],
+      [15,-148,7],[22,-144,6],[17,-137,7],[22,-131,6.5],[16,-125,6.5],[21,-119,6]
+    ]) { ctx.beginPath(); ctx.arc(hx+1,hy+1,hr,0,Math.PI*2); ctx.fill(); }
+    // Main curl body — alternating in/out positions = zigzag = looks wavy
+    ctx.fillStyle = '#1C0E09';
+    for (const [hx, hy, hr] of [
+      [-15,-148,7],[-22,-144,6],[-17,-137,7],[-22,-131,6.5],[-16,-125,6.5],[-21,-119,6],
+      [15,-148,7],[22,-144,6],[17,-137,7],[22,-131,6.5],[16,-125,6.5],[21,-119,6]
+    ]) { ctx.beginPath(); ctx.arc(hx,hy,hr,0,Math.PI*2); ctx.fill(); }
+    // Lighter midtone to separate individual curls
+    ctx.fillStyle = '#3A1A0A';
+    for (const [hx, hy, hr] of [
+      [-15,-148,7],[-22,-144,6],[-17,-137,7],[-22,-131,6.5],[-16,-125,6.5],[-21,-119,6],
+      [15,-148,7],[22,-144,6],[17,-137,7],[22,-131,6.5],[16,-125,6.5],[21,-119,6]
+    ]) { ctx.beginPath(); ctx.arc(hx-hr*0.3,hy-hr*0.35,hr*0.45,0,Math.PI*2); ctx.fill(); }
+
     // Black beanie
     ctx.fillStyle = '#0F0F0F';
     ctx.beginPath(); ctx.ellipse(0, -163, 16, 13, 0, Math.PI, 0); ctx.fill(); // dome
@@ -750,12 +770,6 @@ function drawCharOverlay(id) {
     ctx.strokeStyle = '#2A2A2A'; ctx.lineWidth = 0.8;
     for (let i = -14; i <= 14; i += 3) {
       ctx.beginPath(); ctx.moveTo(i, -155); ctx.lineTo(i, -150); ctx.stroke();
-    }
-
-    // Curly hair peeking below beanie on sides
-    ctx.fillStyle = '#180E0C';
-    for (const [hx, hy, hr] of [[-17,-152,4],[-20,-146,3.5],[-18,-140,4],[17,-152,4],[20,-146,3.5],[18,-140,4]]) {
-      ctx.beginPath(); ctx.arc(hx, hy, hr, 0, Math.PI * 2); ctx.fill();
     }
   }
 }
@@ -3648,12 +3662,11 @@ function updateAI() {
     } else {
       brendan.anim = 'idle';
     }
-    brendan.x = Math.max(20, Math.min(295, brendan.x));
-    // Brendan drifts forward when attacking for harder defense angles
+    brendan.x = Math.max(20, Math.min(340, brendan.x));
     const bOffY = brendan._willShoot ? COURT_FAR_Y + 4 : COURT_FAR_Y + 18;
     if (Math.abs(brendan.y - bOffY) > 6) brendan.y += Math.sign(bOffY - brendan.y) * 1.2;
 
-    if (brendan._willShoot && Math.abs(brendan.x - targetX) < 15 && brendan.aiTimer > 30) {
+    if (brendan._willShoot && (Math.abs(brendan.x - targetX) < 15 || brendan.aiTimer > 80)) {
       brendan._willShoot = false;
       brendan._willThree = false;
       brendan.aiTimer = 0;
@@ -3728,7 +3741,7 @@ function updateAI() {
         }
       }
     }
-    james.x = Math.max(20, Math.min(295, james.x));
+    james.x = Math.max(20, Math.min(340, james.x));
 
   } else {
     // No one has the ball — support positions

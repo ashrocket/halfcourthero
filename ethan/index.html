@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ETHAN — Nara's Room</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; background: #001a00; overflow: hidden; font-family: 'Courier New', monospace; }
+  #stage { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  #cv { display: block; cursor: grab; }
+  #cv:active { cursor: grabbing; }
+  .name-block { position: absolute; top: 40px; left: 50%; transform: translateX(-50%); text-align: center; pointer-events: none; }
+  .char-name { font-size: clamp(32px, 6vw, 64px); font-weight: 900; letter-spacing: 0.12em; color: #32CD32; text-shadow: 0 0 30px #32CD3280, 0 0 60px #32CD3240; }
+  .char-role { font-size: clamp(12px, 2vw, 18px); letter-spacing: 0.3em; color: #7FFF00; opacity: 0.85; margin-top: 4px; }
+  .info-block { position: absolute; bottom: 48px; left: 50%; transform: translateX(-50%); text-align: center; pointer-events: none; }
+  .ability { font-size: clamp(11px, 1.8vw, 15px); letter-spacing: 0.25em; color: #32CD32; opacity: 0.75; }
+  .controls { position: absolute; bottom: 80px; right: 28px; display: flex; flex-direction: column; gap: 10px; }
+  .btn { width: 44px; height: 44px; border-radius: 50%; border: 2px solid #32CD3260; background: rgba(50,205,50,0.12); color: #7FFF00; font-size: 22px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.15s, border-color 0.15s; user-select: none; }
+  .btn:hover { background: rgba(50,205,50,0.28); border-color: #32CD32; }
+  .back-btn { position: absolute; top: 36px; left: 28px; font-size: 13px; letter-spacing: 0.2em; color: #32CD3280; text-decoration: none; transition: color 0.15s; }
+  .back-btn:hover { color: #32CD32; }
+  .orbit-hint { position: absolute; bottom: 28px; left: 50%; transform: translateX(-50%); font-size: 11px; letter-spacing: 0.2em; color: #ffffff30; pointer-events: none; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="name-block">
+    <div class="char-name">ETHAN</div>
+    <div class="char-role">BASS</div>
+  </div>
+  <canvas id="cv"></canvas>
+  <div class="info-block">
+    <div class="ability">🛡 LOCKDOWN · +20% STEAL RANGE</div>
+  </div>
+  <div class="controls">
+    <div class="btn" id="zoomIn">+</div>
+    <div class="btn" id="zoomOut">−</div>
+  </div>
+  <a class="back-btn" href="/">← BACK TO GAME</a>
+  <div class="orbit-hint">DRAG TO ORBIT · SCROLL TO ZOOM</div>
+</div>
+
+<script>
+const CHAR_ID    = 'ethan';
+const SPRITE_SRC = '../assets/ethan_sprite.png';
+const HUE        = '#32CD32';
+
+const canvas = document.getElementById('cv');
+const ctx    = canvas.getContext('2d');
+let W = 0, H = 0;
+let zoom = 1.0;
+const MIN_ZOOM = 0.4, MAX_ZOOM = 3.0;
+let orbitAngle = 0;
+let orbitSpeed = 0.007;
+let frame = 0;
+let dragging = false, lastX = 0;
+let orbitDragVel = 0;
+
+const spr = new Image();
+spr.src = SPRITE_SRC;
+
+function resize() {
+  const dpr = window.devicePixelRatio || 1;
+  const sz = Math.min(window.innerWidth, window.innerHeight) * 0.72;
+  canvas.width = sz * dpr; canvas.height = sz * dpr;
+  canvas.style.width = sz + 'px'; canvas.style.height = sz + 'px';
+  W = sz * dpr; H = sz * dpr;
+}
+window.addEventListener('resize', resize);
+resize();
+
+function drawOverlay() {
+  // Neck skin patch
+  ctx.fillStyle = '#C68642';
+  ctx.beginPath(); ctx.ellipse(0, -126, 7, 5, 0, 0, Math.PI * 2); ctx.fill();
+
+  // Straight shoulder-length brown hair panels
+  ctx.fillStyle = '#3D2011';
+  ctx.beginPath();
+  ctx.moveTo(-8, -164); ctx.lineTo(-17, -162); ctx.lineTo(-19, -118); ctx.lineTo(-9, -118); ctx.lineTo(-9, -160);
+  ctx.closePath(); ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(8, -164); ctx.lineTo(17, -162); ctx.lineTo(19, -118); ctx.lineTo(9, -118); ctx.lineTo(9, -160);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#5C3520';
+  ctx.beginPath();
+  ctx.moveTo(-9, -162); ctx.lineTo(-11, -162); ctx.lineTo(-12, -120); ctx.lineTo(-10, -120); ctx.closePath(); ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(9, -162); ctx.lineTo(11, -162); ctx.lineTo(12, -120); ctx.lineTo(10, -120); ctx.closePath(); ctx.fill();
+
+  // Backward black baseball cap
+  ctx.fillStyle = '#0A0A0A';
+  ctx.beginPath(); ctx.ellipse(0, -161, 15, 13, 0, Math.PI, 0); ctx.fill();
+  ctx.fillRect(-15, -163, 30, 8);
+  ctx.beginPath();
+  ctx.moveTo(-12, -165); ctx.lineTo(-27, -166); ctx.lineTo(-28, -162); ctx.lineTo(-12, -161); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#2A2A2A';
+  ctx.beginPath(); ctx.roundRect(13, -162, 5, 3, 1); ctx.fill();
+
+  // Round dark sunglasses
+  const eyeY = -150;
+  ctx.fillStyle = 'rgba(5,5,5,0.88)';
+  for (const ex of [-8, 8]) {
+    ctx.beginPath(); ctx.arc(ex, eyeY, 5.5, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#111'; ctx.lineWidth = 1.5; ctx.stroke();
+  }
+  ctx.strokeStyle = '#111'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(-2.5, eyeY); ctx.lineTo(2.5, eyeY); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-13.5, eyeY); ctx.lineTo(-20, eyeY - 1); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(13.5, eyeY); ctx.lineTo(20, eyeY - 1); ctx.stroke();
+}
+
+function drawFrame() {
+  ctx.clearRect(0, 0, W, H);
+  const cx = W / 2, cy = H / 2;
+  const sprH = H * 0.58;
+
+  const grd = ctx.createRadialGradient(cx, cy + sprH * 0.1, 0, cx, cy, H * 0.55);
+  grd.addColorStop(0, HUE + '18'); grd.addColorStop(0.5, HUE + '08'); grd.addColorStop(1, 'transparent');
+  ctx.fillStyle = grd; ctx.fillRect(0, 0, W, H);
+
+  const squish = Math.abs(Math.cos(orbitAngle));
+  ctx.save();
+  ctx.translate(cx, cy + sprH * 0.52);
+  ctx.scale(squish * 0.9 + 0.1, 1);
+  ctx.beginPath(); ctx.ellipse(0, 0, sprH * 0.22, sprH * 0.05, 0, 0, Math.PI * 2);
+  ctx.fillStyle = `rgba(0,0,0,${0.22 + 0.12 * squish})`; ctx.fill();
+  ctx.restore();
+
+  const bob = Math.sin(frame * 0.045) * (H * 0.012);
+  const charY = cy + sprH * 0.5 + bob;
+  const facing = Math.cos(orbitAngle) >= 0 ? 1 : -1;
+  const xScale = Math.max(0.04, Math.abs(Math.cos(orbitAngle)));
+
+  ctx.save();
+  ctx.translate(cx, charY);
+  ctx.scale(zoom * xScale * facing, zoom);
+  if (spr.complete && spr.naturalWidth > 0) {
+    const sH = sprH, sW = sH * spr.naturalWidth / spr.naturalHeight;
+    ctx.drawImage(spr, -sW / 2, -sH, sW, sH);
+  }
+  drawOverlay();
+  ctx.restore();
+}
+
+function tick() {
+  frame++;
+  if (!dragging) { orbitAngle += orbitSpeed + orbitDragVel; orbitDragVel *= 0.96; }
+  drawFrame();
+  requestAnimationFrame(tick);
+}
+tick();
+
+document.getElementById('zoomIn').addEventListener('click', () => { zoom = Math.min(MAX_ZOOM, zoom * 1.2); });
+document.getElementById('zoomOut').addEventListener('click', () => { zoom = Math.max(MIN_ZOOM, zoom / 1.2); });
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom * (e.deltaY > 0 ? 0.9 : 1.1)));
+}, { passive: false });
+canvas.addEventListener('pointerdown', e => { dragging = true; lastX = e.clientX; canvas.setPointerCapture(e.pointerId); });
+canvas.addEventListener('pointermove', e => {
+  if (!dragging) return;
+  const dx = e.clientX - lastX;
+  orbitAngle += dx * 0.012; orbitDragVel = dx * 0.012; lastX = e.clientX;
+});
+canvas.addEventListener('pointerup', () => { dragging = false; });
+</script>
+</body>
+</html>
