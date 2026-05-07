@@ -20,9 +20,38 @@ canvas {
   position: fixed;
   image-rendering: pixelated;
 }
+#spotify-overlay {
+  position: fixed; inset: 0; z-index: 999;
+  background: #0d0520;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 20px; padding: 32px;
+  font-family: 'Courier New', monospace;
+}
+#spotify-overlay.hidden { display: none; }
+#spotify-overlay h1 { color: #FF6B35; font-size: 22px; letter-spacing: 0.15em; text-align: center; }
+#spotify-overlay p  { color: rgba(255,255,255,0.55); font-size: 13px; letter-spacing: 0.08em; text-align: center; line-height: 1.6; }
+#spotify-overlay .btn-lobby {
+  padding: 14px 28px; background: #1DB954; color: #000;
+  border: none; border-radius: 24px; font-size: 14px;
+  font-family: 'Courier New', monospace; font-weight: 700;
+  letter-spacing: 0.1em; cursor: pointer;
+}
+#spotify-overlay .btn-skip {
+  background: none; border: 1px solid rgba(255,255,255,0.2);
+  color: rgba(255,255,255,0.4); padding: 10px 20px;
+  border-radius: 20px; font-size: 11px; font-family: 'Courier New', monospace;
+  letter-spacing: 0.1em; cursor: pointer;
+}
 </style>
 </head>
 <body>
+<div id="spotify-overlay">
+  <h1>🏀 HALF COURT HERO</h1>
+  <p>Connect Spotify to play <strong style="color:#FF6B35">Lizzy McGuire</strong><br>by Nara's Room while you ball.<br>Requires Spotify Premium.</p>
+  <button class="btn-lobby" onclick="window.location.href='https://bandmusicgames.party'">▶ CONNECT SPOTIFY AT LOBBY</button>
+  <button class="btn-skip" onclick="skipSpotify()">play without music</button>
+</div>
 <canvas id="g"></canvas>
 <script>
 /* ═══════════════════════════════════════════════════════════════
@@ -1981,6 +2010,10 @@ function startGameWithSelection() {
   S.possession = 'a';
   S._playerScores = { [TEAM_A_IDS[0]]: 0, [TEAM_A_IDS[1]]: 0 };
   S.screen = 'playing';
+  if (window._spotifyConnected && !window._musicPlaying) {
+    SpotifyPlayer.play();
+    window._musicPlaying = true;
+  }
 }
 
 function drawCharSprite(id, anim, f) {
@@ -4542,7 +4575,16 @@ function loop() {
 // ── Boot ─────────────────────────────────────────────────────────
 initState();
 loop();
+
+function skipSpotify() {
+  document.getElementById('spotify-overlay').classList.add('hidden');
+  window._gameReady = true;
+}
 </script>
+<script>window.onSpotifyWebPlaybackSDKReady=function(){window._sdkReady=true;if(window._onSDKReady)window._onSDKReady();}</script>
+<script src="https://sdk.scdn.co/spotify-player.js"></script>
+<script src="config.js"></script>
+<script src="js/spotify.js"></script>
 <a href="https://bandmusicgames.party" style="position:fixed;top:84px;right:12px;z-index:9999;padding:7px 13px;background:linear-gradient(135deg,#a855f7,#ec4899);color:#fff;border-radius:18px;font-size:10px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-weight:800;letter-spacing:0.1em;text-decoration:none;box-shadow:0 4px 12px rgba(168,85,247,0.35);">← LOBBY</a>
 </body>
 </html>
