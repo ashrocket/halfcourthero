@@ -108,24 +108,28 @@ function next(delta) {
 
 function layout() {
   const dpr = window.devicePixelRatio || 1;
+  const isWide = W / H > 1.2;
   const dotW = Math.min(120 * dpr, W * 0.17);
   const gap = Math.max(14 * dpr, W * 0.025);
   const dotY = H - 66 * dpr;
   const summaryH = 74 * dpr;
   const summaryY = dotY - 118 * dpr;
   const labelY = summaryY - 108 * dpr;
-  const titleClear = 128 * dpr;
-  const characterBottom = labelY - 88 * dpr;
-  const floor = Math.min(H * 0.55, characterBottom);
+  const characterTop = isWide ? H * 0.22 : H * 0.12;
+  const characterBottom = labelY - (isWide ? 150 : 90) * dpr;
+  const maxBodyH = Math.max(150 * dpr, characterBottom - characterTop);
+  const bodyH = isWide
+    ? Math.min(H * 0.28, W * 0.32, maxBodyH)
+    : Math.min(H * 0.42, W * 0.65, maxBodyH);
+  const floor = characterTop + bodyH;
   const sideY = floor + 8 * dpr;
-  const maxBodyH = Math.max(170 * dpr, floor - titleClear);
   return {
     dpr,
     cx: W * 0.5,
     floor,
     sideY,
-    bodyH: Math.min(H * 0.34, W * 0.38, maxBodyH),
-    sideH: Math.min(H * 0.26, W * 0.14),
+    bodyH,
+    sideH: isWide ? Math.min(H * 0.25, W * 0.13) : Math.min(H * 0.26, W * 0.18),
     leftX: W * 0.18,
     rightX: W * 0.82,
     labelY,
