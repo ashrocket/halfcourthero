@@ -43,6 +43,77 @@ canvas {
   border-radius: 20px; font-size: 11px; font-family: 'Courier New', monospace;
   letter-spacing: 0.1em; cursor: pointer;
 }
+/* ── Feedback overlay ── */
+#feedback-overlay {
+  display: none;
+  position: fixed; inset: 0; z-index: 9998;
+  background: rgba(13,5,32,0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  align-items: center; justify-content: center;
+  font-family: 'Courier New', monospace;
+}
+#feedback-overlay.open { display: flex; }
+#feedback-box {
+  background: #1a0a3e;
+  border: 1px solid rgba(255,107,53,0.3);
+  border-radius: 20px;
+  padding: 28px 24px;
+  width: min(340px, 90vw);
+  display: flex; flex-direction: column; gap: 16px;
+}
+#feedback-box h2 {
+  color: #FF6B35; font-size: 15px; letter-spacing: 0.2em;
+  text-transform: uppercase; text-align: center; margin-bottom: 2px;
+}
+.fb-label {
+  color: rgba(255,255,255,0.5); font-size: 10px;
+  letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 4px;
+}
+.star-row { display: flex; gap: 6px; }
+.star-row span {
+  font-size: 22px; cursor: pointer; opacity: 0.3;
+  transition: opacity 0.12s;
+  -webkit-user-select: none; user-select: none;
+}
+.star-row span.lit { opacity: 1; }
+.music-row { display: flex; gap: 8px; }
+.music-row button {
+  flex: 1; padding: 8px 4px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 10px; color: rgba(255,255,255,0.5);
+  font-size: 10px; font-family: 'Courier New', monospace;
+  letter-spacing: 0.08em; cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.music-row button.selected {
+  background: rgba(255,107,53,0.18);
+  border-color: #FF6B35; color: #FF6B35;
+}
+#fb-bugs {
+  width: 100%; background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 10px; color: rgba(255,255,255,0.75);
+  font-family: 'Courier New', monospace; font-size: 12px;
+  padding: 10px; resize: none; outline: none;
+  line-height: 1.5;
+}
+#fb-bugs::placeholder { color: rgba(255,255,255,0.2); }
+.fb-actions { display: flex; gap: 10px; }
+#fb-send {
+  flex: 1; padding: 12px; background: #FF6B35;
+  border: none; border-radius: 12px; color: #000;
+  font-family: 'Courier New', monospace; font-size: 12px;
+  font-weight: 700; letter-spacing: 0.12em; cursor: pointer;
+}
+#fb-cancel {
+  padding: 12px 16px; background: none;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 12px; color: rgba(255,255,255,0.35);
+  font-family: 'Courier New', monospace; font-size: 11px;
+  cursor: pointer;
+}
 </style>
 </head>
 <body>
@@ -4586,5 +4657,98 @@ function skipSpotify() {
 <script src="config.js"></script>
 <script src="js/spotify.js"></script>
 <a href="https://bandmusicgames.party" style="position:fixed;top:84px;right:12px;z-index:9999;padding:7px 13px;background:linear-gradient(135deg,#a855f7,#ec4899);color:#fff;border-radius:18px;font-size:10px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-weight:800;letter-spacing:0.1em;text-decoration:none;box-shadow:0 4px 12px rgba(168,85,247,0.35);">← LOBBY</a>
+<button onclick="document.getElementById('feedback-overlay').classList.add('open')" style="position:fixed;top:120px;right:12px;z-index:9999;padding:7px 13px;background:rgba(255,107,53,0.15);color:#FF6B35;border:1px solid rgba(255,107,53,0.35);border-radius:18px;font-size:10px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-weight:800;letter-spacing:0.1em;cursor:pointer;">FEEDBACK</button>
+
+<div id="feedback-overlay">
+  <div id="feedback-box">
+    <h2>🏀 HOW WAS IT?</h2>
+
+    <div>
+      <div class="fb-label">Controls feel</div>
+      <div class="star-row" id="stars-controls">
+        <span data-v="1">★</span><span data-v="2">★</span><span data-v="3">★</span><span data-v="4">★</span><span data-v="5">★</span>
+      </div>
+    </div>
+
+    <div>
+      <div class="fb-label">Overall fun</div>
+      <div class="star-row" id="stars-fun">
+        <span data-v="1">★</span><span data-v="2">★</span><span data-v="3">★</span><span data-v="4">★</span><span data-v="5">★</span>
+      </div>
+    </div>
+
+    <div>
+      <div class="fb-label">Music connected?</div>
+      <div class="music-row" id="music-row">
+        <button data-v="yes">✓ YES</button>
+        <button data-v="no">✗ NO</button>
+        <button data-v="skipped">SKIPPED</button>
+      </div>
+    </div>
+
+    <div>
+      <div class="fb-label">Bugs / other notes</div>
+      <textarea id="fb-bugs" rows="3" placeholder="anything broken or weird?"></textarea>
+    </div>
+
+    <div class="fb-actions">
+      <button id="fb-cancel" onclick="document.getElementById('feedback-overlay').classList.remove('open')">CANCEL</button>
+      <button id="fb-send">SEND ▶</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  // Star ratings
+  function initStars(rowId) {
+    const stars = document.querySelectorAll('#' + rowId + ' span');
+    let val = 0;
+    stars.forEach(s => {
+      s.addEventListener('click', () => {
+        val = parseInt(s.dataset.v);
+        stars.forEach(x => x.classList.toggle('lit', parseInt(x.dataset.v) <= val));
+      });
+    });
+    return () => val;
+  }
+  const getControls = initStars('stars-controls');
+  const getFun      = initStars('stars-fun');
+
+  // Music buttons
+  let musicVal = '';
+  document.querySelectorAll('#music-row button').forEach(b => {
+    b.addEventListener('click', () => {
+      musicVal = b.dataset.v;
+      document.querySelectorAll('#music-row button').forEach(x => x.classList.remove('selected'));
+      b.classList.add('selected');
+    });
+  });
+
+  document.getElementById('fb-send').addEventListener('click', () => {
+    const controls = getControls();
+    const fun      = getFun();
+    const bugs     = document.getElementById('fb-bugs').value.trim();
+    const stars    = n => '★'.repeat(n) + '☆'.repeat(5 - n);
+    const body = [
+      'HALF COURT HERO — Beta Feedback',
+      '',
+      'Controls: ' + (controls ? stars(controls) + ' (' + controls + '/5)' : 'not rated'),
+      'Fun:      ' + (fun      ? stars(fun)      + ' (' + fun      + '/5)' : 'not rated'),
+      'Music:    ' + (musicVal || 'not answered'),
+      '',
+      'Notes:',
+      bugs || '(none)',
+    ].join('\n');
+
+    window.open(
+      'mailto:ashleyraiteri@gmail.com'
+        + '?subject=' + encodeURIComponent('[HCH Beta] Feedback')
+        + '&body='    + encodeURIComponent(body)
+    );
+    document.getElementById('feedback-overlay').classList.remove('open');
+  });
+})();
+</script>
 </body>
 </html>
