@@ -29,6 +29,7 @@
 </div>
 
 <script>
+const ASSET_VERSION = '3870145';
 const CHARS = [
   {
     id: 'nara', name: 'NARA', fullName: 'NARA AVAKIAN', role: 'VOCALS · GUITAR',
@@ -66,7 +67,7 @@ let hot = null;
 
 CHARS.forEach(c => {
   c.img = new Image();
-  c.img.src = c.sprite;
+  c.img.src = `${c.sprite}?v=${ASSET_VERSION}`;
 });
 
 function resize() {

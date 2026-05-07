@@ -41,10 +41,11 @@ const courtBg = new Image();
 courtBg.src = 'assets/court_env.png';
 
 // ── Character sprites ───────────────────────────────────────────
+const ASSET_VERSION = '3870145';
 const sprites = {};
 for (const id of ['nara', 'ethan', 'brendan', 'will']) {
   sprites[id] = new Image();
-  sprites[id].src = `assets/${id}_sprite.png`;
+  sprites[id].src = `assets/${id}_sprite.png?v=${ASSET_VERSION}`;
 }
 
 let _scale = 1, _rotated = false;
