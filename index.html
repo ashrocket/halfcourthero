@@ -347,10 +347,14 @@ function initState() {
     shake: 0,
     paused: false,
     stats: { shots: 0, made: 0, steals: 0, blocks: 0, threes: 0, alleyOops: 0, assists: 0, twos: 0, floaters: 0 },
-    _stoppedRun: false, // human scored to break a CPU 3+ run
+    _stoppedRun: false,
+    _hotSpots: [],     // [{x, ttl}] successful shot positions for court heat map
     _cpuStreak: 0,  // consecutive CPU scores (run detection)
     _maxLead: 0,    // biggest lead the human team held
     _maxDeficit: 0, // biggest deficit human faced this game
+    _hotHand: 0,    // consecutive makes by human team
+    _fireMode: false,
+    _fireModeFrames: 0,
     hoopFlash: 0,
     _fastBreak: 0,
     _lastPasser: null, // for assist tracking
@@ -1232,6 +1236,19 @@ function drawHUD() {
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText('⚡ FAST BREAK ⚡', GW / 2, 65);
     ctx.restore();
+  } else if (S.screen === 'playing' && S._fireMode) {
+    // Fire mode banner (overrides streak display when active)
+    const fPct = S._fireModeFrames / 480;
+    const pulse = 0.75 + Math.sin(S.frame * 0.28) * 0.2;
+    ctx.save();
+    ctx.globalAlpha = pulse;
+    ctx.fillStyle = 'rgba(255,69,0,0.18)';
+    ctx.fillRect(0, 55, GW * fPct, 20);
+    ctx.font = 'bold 11px monospace'; ctx.letterSpacing = '0.06em';
+    ctx.fillStyle = '#FF4500';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillText('🔥 FIRE MODE — ' + S._hotHand + ' IN A ROW', 14, 65);
+    ctx.restore();
   } else if (S.screen === 'playing' && S.streak >= 3) {
     ctx.save();
     ctx.font = 'bold 10px monospace'; ctx.letterSpacing = '0';
@@ -1654,6 +1671,7 @@ function drawGameOver() {
     st.blocks > 0 ? ['BLOCKS', `${st.blocks}`, '🛡'] : null,
     S._stoppedRun ? ['RUN STOPPER', '🛑', 'BROKE THE RUN!'] : null,
     S.streak > 1 ? ['HOT STREAK', `×${S.streak}`, best.streak ? `BEST ×${best.streak}` : ''] : null,
+    (S._hotHand || 0) >= 3 ? ['HOT HAND', `${S._hotHand} IN A ROW`, '🔥'] : null,
     (S._maxDeficit || 0) >= 2 && won ? [`COMEBACK +${S._maxDeficit}`, '💪', best.maxComeback ? `BEST +${best.maxComeback}` : ''] : null,
     (S._maxLead || 0) >= 4 ? [`BIGGEST LEAD`, `+${S._maxLead}`, '📈'] : null,
     S._deuceActive && won ? ['DEUCE WIN', '⚖️', best.deuceWins ? `×${best.deuceWins}` : ''] : null,
@@ -2118,6 +2136,12 @@ function releaseShoot() {
     acc = Math.min(acc + charData._3ptBonus, 0.99);
   }
 
+  // Fire mode: on-fire accuracy bonus
+  if (S._fireMode) {
+    acc = Math.min(acc + 0.10, 0.99);
+    if (inGreen || isPerfect) timingText = '🔥 ' + timingText.replace(/^🎯 |^💚 |^🍳 /, '');
+  }
+
   spawnThought(ap.id, timingText);
   if (timingText.includes('DUNK')) {
     sfxDunk();
@@ -2431,12 +2455,17 @@ function updateBall() {
           .map(id => ({ id, dist: Math.hypot(S.players[id].x - b.x, S.players[id].y - b.y) }))
           .sort((a, c) => a.dist - c.dist);
         const closest = all[0];
-        // If human missed, track cold streak
+        // If human missed, track cold streak and reset hot hand
         if (S.possession === 'a' && !b._made && b._fromX !== undefined) {
           S._coldStreak = (S._coldStreak || 0) + 1;
           if (S._coldStreak >= 3) {
             spawnThought(S.activeHuman, '🥶 COLD!');
             S._coldStreak = 0;
+          }
+          S._hotHand = 0;
+          if (S._fireMode) {
+            S._fireMode = false;
+            S._fireModeFrames = 0;
           }
         }
         if (TEAM_A_IDS.includes(closest.id) && closest.dist < 120) {
@@ -2556,6 +2585,13 @@ function scorePoint() {
   const energyBoost = isBuzzer ? 40 : pts === 3 ? 25 : team === 'a' ? 15 : 8;
   S._crowdEnergy = Math.min(100, (S._crowdEnergy || 0) + energyBoost);
   if (team === 'a') S.stats.made++;
+  if (team === 'a') {
+    // Add hot spot at shot origin
+    const shotOriginX = b._fromX || S.players[S.activeHuman]?.x || 100;
+    S._hotSpots = S._hotSpots || [];
+    S._hotSpots.push({ x: shotOriginX, ttl: 1200 });
+    if (S._hotSpots.length > 8) S._hotSpots.shift(); // keep last 8
+  }
   if (team === 'a') S._coldStreak = 0; // reset cold streak on score
   if (team === 'a' && (S._cpuStreak || 0) >= 3) S._stoppedRun = true;
   if (team === 'a') S._cpuStreak = 0;  // break CPU run
@@ -2614,6 +2650,20 @@ function scorePoint() {
       sfxCrowd(0.9);
     }
     S._possessionMoves = 0;
+    // Hot hand tracking
+    S._hotHand = (S._hotHand || 0) + 1;
+    if (!S._fireMode && S._hotHand >= 3) {
+      S._fireMode = true;
+      S._fireModeFrames = 480; // 8 seconds
+      setTimeout(() => {
+        if (S.screen === 'playing') {
+          S.scoreFlash = { text: '🔥 ON FIRE! 🔥', color: '#FF4500', ttl: 90 };
+          sfxCrowd(0.85);
+        }
+      }, 900);
+    } else if (S._fireMode) {
+      S._fireModeFrames = Math.min(S._fireModeFrames + 180, 600); // extend on each make
+    }
   } else {
     S.streak = 0;
     S._cpuStreak = (S._cpuStreak || 0) + 1;
@@ -3221,22 +3271,38 @@ function updateAI() {
       brendan.aiTimer = 0;
       aiShoot(brendan);
     } else if (!brendan._willShoot && brendan.aiTimer > 45 + Math.random() * 30) {
-      // Pass to James, then cut (give-and-go)
       brendan.aiTimer = 0;
-      brendan.hasBall = false;
-      S.ball.carrier = null;
-      S.ball.inAir = true;
-      S.ball.x = brendan.x; S.ball.y = brendan.y - 50;
-      const pdx = james.x - brendan.x;
-      const pdy = (james.y - 55) - (brendan.y - 50);
-      const tPass2 = Math.max(10, Math.hypot(pdx, pdy) / 14);
-      S.ball.vx = pdx / tPass2;
-      S.ball.vy = (pdy - 0.225 * tPass2 * tPass2) / tPass2 - 1;
-      S.ball._pass = true;
-      S.ball._passTarget = 'james';
-      spawnThought('james', '🏀');
-      // Brendan cuts to basket after passing (give-and-go)
-      brendan._givingAndGoing = true;
+      // CPU alley-oop: James near basket, no human defenders in paint
+      const jamesNearBasket = james.x > HOOP_X - 55;
+      const humanInPaint = TEAM_A_IDS.some(id => S.players[id].x > HOOP_X - 60);
+      const cpuAlleyOop = jamesNearBasket && !humanInPaint && Math.random() < 0.3;
+      if (cpuAlleyOop) {
+        // Lob pass to James for alley-oop
+        brendan.hasBall = false;
+        S.ball.carrier = null; S.ball.inAir = true;
+        S.ball.x = brendan.x; S.ball.y = brendan.y - 50;
+        const lpdx = james.x - brendan.x;
+        const lpdy = (james.y - 70) - (brendan.y - 50);
+        const lt = Math.max(12, Math.hypot(lpdx, lpdy) / 12);
+        S.ball.vx = lpdx / lt;
+        S.ball.vy = (lpdy - 0.225 * lt * lt) / lt - 4; // extra loft for lob
+        S.ball._pass = true; S.ball._passTarget = 'james'; S.ball._alleyOop = true;
+        spawnThought('james', '🙌');
+        spawnThought('brendan', '🎳 LOB!');
+      } else {
+        // Normal give-and-go pass
+        brendan.hasBall = false;
+        S.ball.carrier = null; S.ball.inAir = true;
+        S.ball.x = brendan.x; S.ball.y = brendan.y - 50;
+        const pdx = james.x - brendan.x;
+        const pdy = (james.y - 55) - (brendan.y - 50);
+        const tPass2 = Math.max(10, Math.hypot(pdx, pdy) / 14);
+        S.ball.vx = pdx / tPass2;
+        S.ball.vy = (pdy - 0.225 * tPass2 * tPass2) / tPass2 - 1;
+        S.ball._pass = true; S.ball._passTarget = 'james';
+        spawnThought('james', '🏀');
+        brendan._givingAndGoing = true;
+      }
     }
 
   } else if (james.hasBall) {
@@ -3512,6 +3578,30 @@ function loop() {
     S.shotClock = 600; // reset when CPU has ball
   }
 
+  // Fire mode countdown
+  if (S._fireMode) {
+    S._fireModeFrames = Math.max(0, S._fireModeFrames - 1);
+    if (S._fireModeFrames === 0) {
+      S._fireMode = false;
+      spawnThought(S.activeHuman, '❄️ COOLED OFF');
+    }
+    // Fire particles on active human while in fire mode
+    if (S.frame % 3 === 0) {
+      const hp = S.players[S.activeHuman];
+      const fireColors = ['#FF4500', '#FF6A00', '#FFD700', '#FF2222'];
+      S.confetti.push({
+        x: hp.x + (Math.random() - 0.5) * 20,
+        y: hp.y + hp.jumpY - 30 - Math.random() * 30,
+        vx: (Math.random() - 0.5) * 1.5,
+        vy: -1.5 - Math.random() * 2,
+        color: fireColors[Math.floor(Math.random() * fireColors.length)],
+        size: 3 + Math.random() * 3,
+        ttl: 14 + Math.floor(Math.random() * 8),
+        rot: 0, dRot: 0.3
+      });
+    }
+  }
+
   // Track max deficit and lead
   const curDeficit = S.score[1] - S.score[0];
   if (curDeficit > 0) S._maxDeficit = Math.max(S._maxDeficit || 0, curDeficit);
@@ -3533,6 +3623,21 @@ function loop() {
   drawAnimatedCrowd();
   drawFloor();
   drawHoop();
+
+  // Hot spot glows on floor — where human has scored
+  if (S._hotSpots && S._hotSpots.length > 0) {
+    for (let hi = S._hotSpots.length - 1; hi >= 0; hi--) {
+      const hs = S._hotSpots[hi];
+      hs.ttl--;
+      if (hs.ttl <= 0) { S._hotSpots.splice(hi, 1); continue; }
+      const alpha = Math.min(0.22, (hs.ttl / 1200) * 0.3);
+      const rg = ctx.createRadialGradient(hs.x, FLOOR_Y - 4, 0, hs.x, FLOOR_Y - 4, 32);
+      rg.addColorStop(0, `rgba(255,215,0,${alpha})`);
+      rg.addColorStop(1, 'rgba(255,215,0,0)');
+      ctx.fillStyle = rg;
+      ctx.fillRect(hs.x - 32, FLOOR_Y - 36, 64, 40);
+    }
+  }
 
   // Draw characters back-to-front by court depth
   const allIds = [...TEAM_A_IDS, ...TEAM_B_IDS];
