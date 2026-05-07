@@ -351,7 +351,7 @@ const CHARS = {
     hairStyle: 'beanie', hue: '#FF6B35',
     quips: ['🥁 BOOM!', '🔥 BLOCKED!', '😤 MINE!', '💥 DENIED!'],
     ability: 'PAINT BEAST', abilityEmoji: '💪',
-    _3ptBonus: 0, _spd: 1.0, _stealBonus: 0, _paintBlock: true
+    _3ptBonus: 0, _spd: 1.0, _stealBonus: 0, _paintBlock: true, _h: 185
   },
   will: {
     name: 'WILL', fullName: 'WILL FISHER', role: 'KEYS',
@@ -360,7 +360,7 @@ const CHARS = {
     hairStyle: 'glasses', hue: '#9B59B6',
     quips: ['🎹 NICE!', '😎 WILL!', '💜 YES!', '🎯 PERFECT!'],
     ability: 'DEEP RANGE', abilityEmoji: '🔭',
-    _3ptBonus: 0.08, _spd: 0.95, _stealBonus: 0, _h: 165
+    _3ptBonus: 0.08, _spd: 0.95, _stealBonus: 0, _h: 174
   }
 };
 let TEAM_A_IDS = ['nara', 'ethan'];
@@ -1877,7 +1877,24 @@ function drawTitle() {
     const extras = [];
     if (titleBest.deuceWins > 0) extras.push(`⚖️×${titleBest.deuceWins}`);
     if (titleBest.comebacks > 0) extras.push(`💪×${titleBest.comebacks}`);
-    ctx.fillText('🏆 RECORD: ' + wl + (extras.length ? '   ' + extras.join(' ') : ''), GW / 2, 520);
+    ctx.fillText('🏆 RECORD: ' + wl + (extras.length ? '   ' + extras.join(' ') : ''), GW / 2, 510);
+  }
+
+  // Difficulty buttons on landing page
+  const diff = S._difficulty || 'normal';
+  const diffBtns = [['easy','EASY','#32CD32'],['normal','NORMAL','#FFD700'],['hard','HARD','#FF4444']];
+  ctx.fillStyle = 'rgba(255,255,255,0.28)'; ctx.font = 'bold 9px monospace';
+  ctx.textAlign = 'center'; ctx.letterSpacing = '0.12em';
+  ctx.fillText('DIFFICULTY', GW / 2, 543);
+  let dbx = GW / 2 - 126;
+  for (const [key, label, color] of diffBtns) {
+    const sel = diff === key;
+    fillRR(dbx, 552, 76, 32, 9, sel ? color : 'rgba(0,0,0,0.4)', sel ? '#FFF' : color, sel ? 2.5 : 2);
+    ctx.fillStyle = sel ? '#111' : color;
+    ctx.font = (sel ? 'bold ' : '') + '12px monospace';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.letterSpacing = '0';
+    ctx.fillText(label, dbx + 38, 568);
+    dbx += 88;
   }
 
   // Bouncing basketball animation in title
@@ -1981,23 +1998,6 @@ function drawCharSelect() {
     ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center'; ctx.letterSpacing = '0';
     ctx.fillText('YOUR TEAM', GW / 4, 148);
     ctx.fillText('CPU TEAM', GW * 3 / 4, 148);
-  }
-
-  // Difficulty buttons
-  const diff = S._difficulty || 'normal';
-  const diffBtns = [['easy','EASY','#32CD32'],['normal','NORMAL','#FFD700'],['hard','HARD','#FF4444']];
-  let dbx = GW / 2 - 126;
-  ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.font = 'bold 9px monospace';
-  ctx.textAlign = 'center'; ctx.letterSpacing = '0.12em';
-  ctx.fillText('DIFFICULTY', GW / 2, GH - 114);
-  for (const [key, label, color] of diffBtns) {
-    const sel = diff === key;
-    fillRR(dbx, GH - 104, 76, 30, 9, sel ? color : 'rgba(0,0,0,0.4)', sel ? '#FFF' : color, sel ? 2.5 : 2);
-    ctx.fillStyle = sel ? '#111' : color;
-    ctx.font = (sel ? 'bold ' : '') + '12px monospace';
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.letterSpacing = '0';
-    ctx.fillText(label, dbx + 38, GH - 89);
-    dbx += 88;
   }
 
   // Tap hint
@@ -2230,6 +2230,12 @@ canvas.addEventListener('touchstart', e => {
     if (S.showInfo) { S.showInfo = false; continue; }
 
     if (S.screen === 'title') {
+      // Difficulty buttons
+      if (y >= 548 && y <= 588) {
+        if (x >= 70  && x < 156) { S._difficulty = 'easy';   continue; }
+        if (x >= 156 && x < 244) { S._difficulty = 'normal'; continue; }
+        if (x >= 244 && x < 330) { S._difficulty = 'hard';   continue; }
+      }
       S._charSelectStep = 1; S.screen = 'charselect'; return;
     }
     if (S.screen === 'charselect') {
@@ -2239,14 +2245,8 @@ canvas.addEventListener('touchstart', e => {
       if (S._selectedPlayer && S._selectedTeammate && y >= GH - 46 && y <= GH - 6 && Math.abs(x - GW/2) <= 76) {
         startGameWithSelection(); return;
       }
-      // Difficulty buttons
-      if (y >= GH - 108 && y <= GH - 74) {
-        if (x >= 70  && x < 156) { S._difficulty = 'easy';   continue; }
-        if (x >= 156 && x < 244) { S._difficulty = 'normal'; continue; }
-        if (x >= 244 && x < 330) { S._difficulty = 'hard';   continue; }
-      }
       for (let _i = 0; _i < 4; _i++) {
-        if (Math.abs(x - _CX[_i]) <= 48 && y >= 150 && y <= GH - 120) {
+        if (Math.abs(x - _CX[_i]) <= 48 && y >= 150 && y <= GH - 60) {
           const _id = _all[_i];
           if ((S._charSelectStep || 1) === 1) {
             S._selectedPlayer = _id; S._selectedTeammate = null; S._charSelectStep = 2;
@@ -2422,6 +2422,11 @@ canvas.addEventListener('mousedown', e => {
   if (Math.hypot(x - 374, y - 14) < 18) { S.showInfo = !S.showInfo; return; }
   if (S.showInfo) { S.showInfo = false; return; }
   if (S.screen === 'title') {
+    if (y >= 548 && y <= 588) {
+      if (x >= 70  && x < 156) { S._difficulty = 'easy';   return; }
+      if (x >= 156 && x < 244) { S._difficulty = 'normal'; return; }
+      if (x >= 244 && x < 330) { S._difficulty = 'hard';   return; }
+    }
     S._charSelectStep = 1; S.screen = 'charselect'; return;
   }
   if (S.screen === 'gameover') {
@@ -2434,13 +2439,8 @@ canvas.addEventListener('mousedown', e => {
     if (S._selectedPlayer && S._selectedTeammate && y >= GH - 39 && y <= GH - 11 && Math.abs(x - GW/2) <= 55) {
       startGameWithSelection(); return;
     }
-    if (y >= GH - 108 && y <= GH - 74) {
-      if (x >= 70  && x < 156) { S._difficulty = 'easy';   return; }
-      if (x >= 156 && x < 244) { S._difficulty = 'normal'; return; }
-      if (x >= 244 && x < 330) { S._difficulty = 'hard';   return; }
-    }
     for (let _i = 0; _i < 4; _i++) {
-      if (Math.abs(x - _CX[_i]) <= 48 && y >= 150 && y <= GH - 120) {
+      if (Math.abs(x - _CX[_i]) <= 48 && y >= 150 && y <= GH - 60) {
         const _id = _all[_i];
         if ((S._charSelectStep || 1) === 1) {
           S._selectedPlayer = _id; S._selectedTeammate = null; S._charSelectStep = 2;
@@ -4617,10 +4617,10 @@ function skipSpotify() {
 <script src="https://sdk.scdn.co/spotify-player.js"></script>
 <script src="config.js"></script>
 <script src="js/spotify.js"></script>
-<a href="https://bandmusicgames.party" style="position:fixed;top:84px;right:12px;z-index:9999;padding:7px 13px;background:linear-gradient(135deg,#a855f7,#ec4899);color:#fff;border-radius:18px;font-size:10px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-weight:800;letter-spacing:0.1em;text-decoration:none;box-shadow:0 4px 12px rgba(168,85,247,0.35);">← LOBBY</a>
+<a href="/" style="position:fixed;top:84px;right:12px;z-index:9999;padding:7px 13px;background:linear-gradient(135deg,#a855f7,#ec4899);color:#fff;border-radius:18px;font-size:10px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-weight:800;letter-spacing:0.1em;text-decoration:none;box-shadow:0 4px 12px rgba(168,85,247,0.35);">← LOBBY</a>
 <button onclick="document.getElementById('feedback-overlay').classList.add('open')" style="position:fixed;top:120px;right:12px;z-index:9999;padding:7px 13px;background:rgba(255,107,53,0.15);color:#FF6B35;border:1px solid rgba(255,107,53,0.35);border-radius:18px;font-size:10px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-weight:800;letter-spacing:0.1em;cursor:pointer;">FEEDBACK</button>
 <a href="./characters/" style="position:fixed;top:156px;right:12px;z-index:9999;padding:7px 13px;background:rgba(168,85,247,0.12);color:#a855f7;border:1px solid rgba(168,85,247,0.3);border-radius:18px;font-size:10px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-weight:800;letter-spacing:0.1em;text-decoration:none;">THE BAND</a>
-<div id="vol-controls" style="display:none;position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:9999;display:flex;align-items:center;gap:8px;background:rgba(13,5,32,0.75);border:1px solid rgba(255,255,255,0.1);border-radius:20px;padding:6px 14px;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);">
+<div id="vol-controls" style="display:none;position:fixed;top:84px;left:12px;z-index:9999;flex-direction:row;align-items:center;gap:8px;background:rgba(13,5,32,0.75);border:1px solid rgba(255,255,255,0.1);border-radius:20px;padding:6px 14px;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);">
   <button id="vol-down" style="background:none;border:none;color:rgba(255,255,255,0.55);font-size:16px;cursor:pointer;padding:2px 4px;line-height:1;">−</button>
   <button id="mute-btn" style="background:none;border:none;color:#fff;font-size:16px;cursor:pointer;padding:2px 4px;line-height:1;">🔊</button>
   <button id="vol-up" style="background:none;border:none;color:rgba(255,255,255,0.55);font-size:16px;cursor:pointer;padding:2px 4px;line-height:1;">+</button>
@@ -4652,7 +4652,7 @@ function skipSpotify() {
 
   // Show controls once Spotify is connected and playing
   const showWhenReady = setInterval(() => {
-    if (window._spotifyConnected || window._musicPlaying) {
+    if (window._musicPlaying) {
       document.getElementById('vol-controls').style.display = 'flex';
       clearInterval(showWhenReady);
     }
