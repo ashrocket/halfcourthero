@@ -1611,13 +1611,15 @@ function drawControls() {
   const isHeld = isAttacking ? S.shootHeld  : S.blockHeld;
 
   // Joystick zone (left) — square pad
-  const JOY_SZ = 110; // side length
-  const JOY_CX = 90, JOY_CY = 650;
+  const JOY_SZ = 110; // active travel indicator size
+  const JOY_IDLE_X = 8, JOY_IDLE_Y = 578;  // inactive zone top-left
+  const JOY_IDLE_W = 238, JOY_IDLE_H = 164; // inactive zone dimensions
+  const JOY_CX = JOY_IDLE_X + JOY_IDLE_W / 2, JOY_CY = JOY_IDLE_Y + JOY_IDLE_H / 2;
   if (!S.joy.active) {
     ctx.fillStyle = 'rgba(255,255,255,0.04)';
     ctx.strokeStyle = 'rgba(255,255,255,0.1)'; ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.roundRect(JOY_CX - JOY_SZ / 2, JOY_CY - JOY_SZ / 2, JOY_SZ, JOY_SZ, 12);
+    ctx.roundRect(JOY_IDLE_X, JOY_IDLE_Y, JOY_IDLE_W, JOY_IDLE_H, 14);
     ctx.fill(); ctx.stroke();
     ctx.fillStyle = 'rgba(255,255,255,0.12)';
     ctx.font = '10px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -3356,15 +3358,15 @@ function resetBallAfterScore(nextPossession) {
   }
 
   if (nextPossession === 'a') {
-    S.players[TEAM_A_IDS[0]].x = 80;  S.players[TEAM_A_IDS[1]].x = 150;
-    S.players[TEAM_B_IDS[0]].x = 230; S.players[TEAM_B_IDS[1]].x = 300;
+    S.players[TEAM_A_IDS[0]].x = 110; S.players[TEAM_A_IDS[1]].x = 155;
+    S.players[TEAM_B_IDS[0]].x = 205; S.players[TEAM_B_IDS[1]].x = 255;
   } else {
-    S.players[TEAM_B_IDS[0]].x = 80;  S.players[TEAM_B_IDS[1]].x = 155;
-    S.players[TEAM_A_IDS[0]].x = 240; S.players[TEAM_A_IDS[1]].x = 305;
+    S.players[TEAM_B_IDS[0]].x = 110; S.players[TEAM_B_IDS[1]].x = 155;
+    S.players[TEAM_A_IDS[0]].x = 205; S.players[TEAM_A_IDS[1]].x = 255;
   }
 
   S.ball.inAir   = false;
-  S.ball.x       = 80;
+  S.ball.x       = S.players[carrier].x;
   S.ball.y       = FLOOR_Y - 30;
   S.ball.vx      = 0; S.ball.vy = 0;
   S.ball.carrier = carrier;
@@ -3644,12 +3646,12 @@ function updatePlayers() {
     if (S.joy.active) {
       const jNorm = Math.hypot(S.joy.dx, S.joy.dy);
       if (jNorm > 8) {
-        const targetVx = (S.joy.dx / 55) * spd;
+        const targetVx = (-S.joy.dx / 55) * spd;
         const targetVy = (S.joy.dy / 55) * spd * 0.6;
         ap.vx += (targetVx - ap.vx) * 0.3;
         ap.vy += (targetVy - ap.vy) * 0.3;
         if (Math.abs(ap.vx) > 0.35 || Math.abs(ap.vy) > 0.35) {
-          if (Math.abs(S.joy.dx) > 6) ap.facing = S.joy.dx > 0 ? 1 : -1;
+          if (Math.abs(S.joy.dx) > 6) ap.facing = S.joy.dx > 0 ? -1 : 1;
           ap.anim = 'run';
         }
       } else {
