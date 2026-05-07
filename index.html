@@ -1290,6 +1290,18 @@ function drawHUD() {
     ctx.restore();
   }
 
+  // Zone defense indicator (shows when CPU in zone)
+  if (S.screen === 'playing' && S._cpuInZone) {
+    const zp = 0.65 + Math.sin(S.frame * 0.15) * 0.2;
+    ctx.save();
+    ctx.globalAlpha = zp;
+    fillRR(36, 6, 28, 12, 4, 'rgba(0,0,0,0.6)', CHARS.brendan.hue, 1.5);
+    ctx.fillStyle = CHARS.brendan.hue;
+    ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.letterSpacing = '0';
+    ctx.fillText('ZONE', 50, 12);
+    ctx.restore();
+  }
+
   // Difficulty badge (tiny, top right area)
   {
     const diff = S._difficulty || 'normal';
@@ -3171,6 +3183,50 @@ function updateAIDefense() {
   const humanNearWin = S._deuceActive && S.score[0] > S.score[1];
   const humanHot = S.streak >= 3;
   const pressMult = humanNearWin ? 1.25 : humanHot ? 1.1 : 1.0;
+
+  // Zone defense: CPU switches to 2-3 zone when losing by 3+
+  const cpuDeficit = S.score[0] - S.score[1]; // positive = CPU losing
+  const inZone = cpuDeficit >= 3;
+  if (inZone !== (S._cpuInZone || false)) {
+    S._cpuInZone = inZone;
+    if (inZone) {
+      setTimeout(() => { if (S.screen === 'playing') S.scoreFlash = { text: '🔒 CPU SWITCHES TO ZONE!', color: CHARS.brendan.hue, ttl: 70 }; }, 400);
+    }
+  }
+
+  if (inZone) {
+    // 2-3 zone: Brendan guards paint, Will guards perimeter/high post
+    const zoneTargetBX = HOOP_X - 58; // Brendan stays in the paint
+    const zoneTargetBY = (COURT_FAR_Y + COURT_NEAR_Y) / 2;
+    // Will slides toward carrier on perimeter to contest
+    const carrierFarFromBasket = carrier.x < HOOP_X - 120;
+    const zoneTargetWX = carrierFarFromBasket ? Math.max(carrier.x + 18, HOOP_X - 165) : HOOP_X - 100;
+    const zoneTargetWY = carrier.y - 5;
+
+    const zbDx = zoneTargetBX - brendan.x, zbDy = zoneTargetBY - brendan.y;
+    if (Math.abs(zbDx) > 8) { brendan.x += Math.sign(zbDx) * 1.8; brendan.anim = 'run'; brendan.facing = zbDx < 0 ? 1 : -1; }
+    else { brendan.anim = 'idle'; brendan.facing = -1; }
+    if (Math.abs(zbDy) > 6) brendan.y += Math.sign(zbDy) * 1.2;
+    brendan.x = Math.max(20, Math.min(340, brendan.x));
+    brendan.y = Math.max(COURT_FAR_Y, Math.min(COURT_NEAR_Y, brendan.y));
+
+    const zwDx = zoneTargetWX - james.x, zwDy = zoneTargetWY - james.y;
+    if (Math.abs(zwDx) > 8) { james.x += Math.sign(zwDx) * 2.0; james.anim = 'run'; james.facing = zwDx < 0 ? 1 : -1; }
+    else { james.anim = 'idle'; james.facing = -1; }
+    if (Math.abs(zwDy) > 6) james.y += Math.sign(zwDy) * 1.3;
+    james.y = Math.max(COURT_FAR_Y, Math.min(COURT_NEAR_Y, james.y));
+
+    // Jump block logic still applies
+    if (S.shootHeld && S.shootPower > 25) {
+      const distJ = Math.hypot(carrier.x - james.x, carrier.y - james.y);
+      const distB = Math.hypot(carrier.x - brendan.x, carrier.y - brendan.y);
+      const nearest = distB < distJ ? brendan : james;
+      if (Math.hypot(carrier.x - nearest.x, carrier.y - nearest.y) < 55 && nearest.jumpY === 0) {
+        nearest._jumpVy = -7;
+      }
+    }
+    return; // skip man-to-man logic
+  }
 
   // When human is on Chef Curry mode, Brendan overplays the 3pt line
   const brendanOverplays3 = (S._human3ptStreak || 0) >= 3;
