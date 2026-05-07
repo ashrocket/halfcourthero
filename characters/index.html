@@ -9,7 +9,7 @@
   html, body { width: 100%; height: 100%; background: #0a0018; overflow: hidden; font-family: 'Courier New', monospace; }
   #stage { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
   #cv { display: block; cursor: pointer; }
-  .title { position: absolute; top: 36px; left: 50%; transform: translateX(-50%); text-align: center; pointer-events: none; }
+  .title { position: absolute; top: 24px; left: 50%; transform: translateX(-50%); text-align: center; pointer-events: none; z-index: 2; }
   .title-top { font-size: clamp(10px, 2vw, 14px); letter-spacing: 0.35em; color: #FFD700; }
   .title-main { font-size: clamp(18px, 4vw, 28px); font-weight: 900; letter-spacing: 0.15em; color: #ffffff; margin-top: 4px; }
   .hint { display: none; }
@@ -114,17 +114,18 @@ function layout() {
   const summaryH = 74 * dpr;
   const summaryY = dotY - 118 * dpr;
   const labelY = summaryY - 108 * dpr;
-  const floor = Math.min(H * 0.67, labelY - 62 * dpr);
+  const titleClear = 128 * dpr;
+  const characterBottom = labelY - 88 * dpr;
+  const floor = Math.min(H * 0.55, characterBottom);
   const sideY = floor + 8 * dpr;
-  const topClear = 170 * dpr;
-  const maxBodyH = Math.max(210 * dpr, floor - topClear);
+  const maxBodyH = Math.max(170 * dpr, floor - titleClear);
   return {
     dpr,
     cx: W * 0.5,
     floor,
     sideY,
-    bodyH: Math.min(H * 0.46, W * 0.62, maxBodyH),
-    sideH: Math.min(H * 0.34, W * 0.18),
+    bodyH: Math.min(H * 0.34, W * 0.38, maxBodyH),
+    sideH: Math.min(H * 0.26, W * 0.14),
     leftX: W * 0.18,
     rightX: W * 0.82,
     labelY,
