@@ -122,6 +122,28 @@ function sfxCrowd(intensity) {
   } catch(e) {}
 }
 
+function sfxDeuceTension() {
+  // Low sustained drone that plays once when deuce activates
+  try {
+    const ac = getAudio();
+    const dur = 1.2;
+    const osc = ac.createOscillator();
+    const gain = ac.createGain();
+    osc.type = 'sine'; osc.frequency.setValueAtTime(55, ac.currentTime);
+    osc.frequency.linearRampToValueAtTime(80, ac.currentTime + dur);
+    gain.gain.setValueAtTime(0, ac.currentTime);
+    gain.gain.linearRampToValueAtTime(0.06, ac.currentTime + 0.2);
+    gain.gain.linearRampToValueAtTime(0, ac.currentTime + dur);
+    osc.connect(gain); gain.connect(ac.destination);
+    osc.start(); osc.stop(ac.currentTime + dur);
+  } catch(e) {}
+}
+function sfxVictoryFanfare() {
+  [[523,0],[784,80],[1047,160],[1319,240],[1047,340],[1319,420],[1568,500]].forEach(([f, t]) => {
+    setTimeout(() => playTone(f, 0.22, 'sine', 0.28), t);
+  });
+}
+
 function fitCanvas() {
   const lw = window.innerWidth, lh = window.innerHeight;
   _rotated = false;
@@ -158,28 +180,38 @@ const CHARS = {
     skin: '#FDBCB4', hair: '#1C0A00', shirt: '#222222',
     pants: '#3366DD', shoes: '#2A2A2A', brow: '#3D0000',
     hairStyle: 'bob', hue: '#FF1493',
-    quips: ['✨ SWISH!', '💖 YES!', '🎸 LFG!', '⭐ MONEY!']
+    quips: ['✨ SWISH!', '💖 YES!', '🎸 LFG!', '⭐ MONEY!'],
+    // Abilities: +10% 3pt accuracy, slightly higher speed
+    ability: '3PT SHOOTER', abilityEmoji: '🎯',
+    _3ptBonus: 0.10, _spd: 1.0, _stealBonus: 0
   },
   ethan: {
     name: 'ETHAN', role: 'BASS',
     skin: '#C68642', hair: '#3D2B1F', shirt: '#32CD32',
     pants: '#1C1C2E', shoes: '#FFFFFF', brow: '#3D2B1F',
     hairStyle: 'long', hue: '#32CD32',
-    quips: ['🎸 YEAH!', '💪 LOW!', '🏀 NICE!', '🔥 FIRE!']
+    quips: ['🎸 YEAH!', '💪 LOW!', '🏀 NICE!', '🔥 FIRE!'],
+    // Abilities: +steal range 20%, faster defender coverage
+    ability: 'LOCKDOWN', abilityEmoji: '🛡',
+    _3ptBonus: 0, _spd: 1.05, _stealBonus: 0.20
   },
   brendan: {
     name: 'BRENDAN', role: 'DRUMS',
     skin: '#FDBCB4', hair: '#CC2200', shirt: '#FF6B35',
     pants: '#2D5A27', shoes: '#222', brow: '#CC2200',
     hairStyle: 'beanie', hue: '#FF6B35',
-    quips: ['🥁 BOOM!', '🔥 BLOCKED!', '😤 MINE!', '💥 DENIED!']
+    quips: ['🥁 BOOM!', '🔥 BLOCKED!', '😤 MINE!', '💥 DENIED!'],
+    ability: 'PAINT BEAST', abilityEmoji: '💪',
+    _3ptBonus: 0, _spd: 1.0, _stealBonus: 0
   },
   james: {
     name: 'JAMES', role: 'KEYS',
     skin: '#8D5524', hair: '#111', shirt: '#9B59B6',
     pants: '#2C2C2C', shoes: '#9B59B6', brow: '#111',
     hairStyle: 'glasses', hue: '#9B59B6',
-    quips: ['🎹 NICE!', '😎 EZ!', '💜 YES!', '🎯 PERFECT!']
+    quips: ['🎹 NICE!', '😎 EZ!', '💜 YES!', '🎯 PERFECT!'],
+    ability: 'DEEP RANGE', abilityEmoji: '🔭',
+    _3ptBonus: 0, _spd: 0.95, _stealBonus: 0
   }
 };
 const TEAM_A_IDS = ['nara', 'ethan'];
@@ -264,7 +296,13 @@ function initState() {
     // Score flash
     scoreFlash: null,
     pauseTimer: 0,
-    _cpuTimeoutUsed: false, // CPU has one timeout per game
+    _cpuTimeoutUsed: false,
+    _deuceActive: false,
+    _halftimeDone: false,
+    _humanTimeouts: 1,
+    _possessionMoves: 0,
+    _perfectFlash: null,
+    _playerScores: { nara: 0, ethan: 0 }, // per-player scoring for MVP
     scored: false,
     showInfo: false,
     switchFlash: null,
@@ -274,9 +312,11 @@ function initState() {
     streak: 0,
     shake: 0,
     paused: false,
-    stats: { shots: 0, made: 0, steals: 0, blocks: 0, threes: 0, alleyOops: 0 },
+    stats: { shots: 0, made: 0, steals: 0, blocks: 0, threes: 0, alleyOops: 0, assists: 0, twos: 0 },
+    _maxDeficit: 0, // biggest deficit human faced this game
     hoopFlash: 0,
     _fastBreak: 0,
+    _lastPasser: null, // for assist tracking
 
     // Onboarding
     onboardingTimer: 180, // ~3 seconds at 60fps
@@ -526,9 +566,17 @@ function drawChar(id, hasBall) {
   }
 
   if (hasBall) {
-    const bx = anim === 'shoot' ? 18 : 30;
-    const by = anim === 'shoot' ? -175 : -78;
-    drawBallAt(bx, by, 13);
+    if (anim === 'shoot' || anim === 'jump') {
+      drawBallAt(18, -175, 13);
+    } else {
+      // Dribble bounce: ball oscillates between hand (~-78) and floor (~-8)
+      // abs-sin gives natural bounce arc: quick tap at floor, hang time at top
+      const dribPct = Math.abs(Math.sin(f * 0.18));
+      const handY = -78, floorY = -10;
+      const by = handY + (floorY - handY) * (1 - dribPct);
+      const bSize = 13 - (1 - dribPct) * 2;
+      drawBallAt(30, by, bSize);
+    }
   }
 
   ctx.restore();
@@ -587,12 +635,14 @@ function drawFace(d, anim, hy, f) {
 
 // ── Ball ─────────────────────────────────────────────────────────
 function drawBallAt(x, y, r) {
-  // Fire glow on streak
-  if (S.streak >= 3 && S.ball && !S.ball.carrier) {
+  // Fire glow on streak (always visible when hot)
+  if (S.streak >= 3) {
+    const fireAlpha = 0.55 + Math.sin(S.frame * 0.18) * 0.25;
     ctx.save();
+    ctx.globalAlpha = fireAlpha;
     ctx.shadowColor = S.streak >= 5 ? '#FF2200' : '#FF8800';
-    ctx.shadowBlur = 18;
-    ctx.beginPath(); ctx.arc(x, y, r + 3, 0, Math.PI * 2);
+    ctx.shadowBlur = S.streak >= 5 ? 24 : 18;
+    ctx.beginPath(); ctx.arc(x, y, r + (S.streak >= 5 ? 5 : 3), 0, Math.PI * 2);
     ctx.fillStyle = 'transparent'; ctx.fill();
     ctx.restore();
   }
@@ -647,6 +697,17 @@ function drawBall() {
   ctx.fillStyle = 'rgba(0,0,0,0.12)';
   ctx.beginPath(); ctx.ellipse(b.x, FLOOR_Y + 4, 12 - (FLOOR_Y - b.y) * 0.04, 4, 0, 0, Math.PI * 2); ctx.fill();
 
+  // Possession glow when ball is in air
+  if (b.inAir && S.streak < 3) {
+    const glowColor = S.possession === 'a' ? 'rgba(100,200,255,0.18)' : 'rgba(255,80,80,0.15)';
+    ctx.save();
+    ctx.shadowColor = S.possession === 'a' ? '#4ACFFF' : '#FF5555';
+    ctx.shadowBlur = 10;
+    ctx.fillStyle = glowColor;
+    ctx.beginPath(); ctx.arc(b.x, b.y, 15, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+
   // Draw with spin rotation
   ctx.save();
   ctx.translate(b.x, b.y);
@@ -673,12 +734,16 @@ function drawShotTrajectory() {
   const vx0 = dx / tFly;
   const vy0 = (dy - 0.225 * tFly * tFly) / tFly;
 
-  const inGreen = power >= POWER_GREEN_LO && power <= POWER_GREEN_HI;
+  const isChefCurry3 = (S._human3ptStreak || 0) >= 3 && dist > SHOT_RANGE_2;
+  const greenLo3 = isChefCurry3 ? POWER_GREEN_LO - 8 : POWER_GREEN_LO;
+  const greenHi3 = isChefCurry3 ? POWER_GREEN_HI + 8 : POWER_GREEN_HI;
+  const inGreen = power >= greenLo3 && power <= greenHi3;
   const isPerfect = power >= 60 && power <= 68;
 
   // Color arc by power quality
   let arcColor;
-  if (isPerfect)      arcColor = 'rgba(0,255,136,0.55)';
+  if (isPerfect && !isChefCurry3) arcColor = 'rgba(0,255,136,0.55)';
+  else if (inGreen && isChefCurry3) arcColor = 'rgba(255,215,0,0.55)';
   else if (inGreen)   arcColor = 'rgba(80,220,80,0.4)';
   else if (power < 5) arcColor = 'rgba(255,255,255,0.18)';
   else                arcColor = 'rgba(255,160,30,0.32)';
@@ -701,8 +766,29 @@ function drawShotTrajectory() {
   ctx.setLineDash([]);
   // Endpoint dot at rim — brighter when in sweet spot
   ctx.beginPath(); ctx.arc(HOOP_X, RIM_Y, inGreen ? 5 : 3.5, 0, Math.PI * 2);
-  ctx.fillStyle = inGreen ? 'rgba(0,255,136,0.7)' : 'rgba(255,255,255,0.3)';
+  ctx.fillStyle = isChefCurry3 && inGreen ? 'rgba(255,215,0,0.85)' : inGreen ? 'rgba(0,255,136,0.7)' : 'rgba(255,255,255,0.3)';
   ctx.fill();
+  ctx.restore();
+}
+
+// ── Shot Type Label ───────────────────────────────────────────────
+function drawShotTypeLabel() {
+  if (!S.shootHeld || S.possession !== 'a') return;
+  const ap = S.players[S.activeHuman];
+  if (!ap.hasBall) return;
+  const dist = Math.abs(ap.x - HOOP_X);
+  let label, labelColor;
+  if (dist <= SHOT_RANGE_LAY)       { label = 'LAYUP'; labelColor = CHARS[S.activeHuman].hue; }
+  else if (dist <= SHOT_RANGE_2)    { label = 'MID RANGE'; labelColor = '#FFD700'; }
+  else if (dist <= SHOT_RANGE_3)    { label = '3-POINTER'; labelColor = '#00CFFF'; }
+  else return;
+  const age = (S.shootPower < 5) ? S.shootPower / 5 : 1;
+  ctx.save();
+  ctx.globalAlpha = age * 0.7;
+  ctx.font = 'bold 9px monospace'; ctx.letterSpacing = '0.12em';
+  ctx.fillStyle = labelColor;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+  ctx.fillText(label, ap.x, ap.y + ap.jumpY - 190);
   ctx.restore();
 }
 
@@ -711,16 +797,19 @@ function drawPowerIndicator() {
   if (S.possession !== 'a') return;
   const power = S.shootPower;
   if (power < 1) return;
-  const inGreen = power >= POWER_GREEN_LO && power <= POWER_GREEN_HI;
+  const isChefCurry2 = (S._human3ptStreak || 0) >= 3;
+  const greenLo2 = isChefCurry2 ? POWER_GREEN_LO - 8 : POWER_GREEN_LO;
+  const greenHi2 = isChefCurry2 ? POWER_GREEN_HI + 8 : POWER_GREEN_HI;
+  const inGreen = power >= greenLo2 && power <= greenHi2;
   const alpha = 0.35 + (power / 100) * 0.5;
-  const color = inGreen ? `rgba(0,255,136,${alpha})` : `rgba(255,200,0,${alpha})`;
+  const color = isChefCurry2 && inGreen ? `rgba(255,200,0,${alpha})` : inGreen ? `rgba(0,255,136,${alpha})` : `rgba(255,200,0,${alpha})`;
 
   ctx.beginPath(); ctx.arc(HOOP_X, RIM_Y, RIM_R + 10, 0, Math.PI * 2);
   ctx.strokeStyle = color; ctx.lineWidth = inGreen ? 4 : 2.5;
   ctx.stroke();
 
   if (inGreen) {
-    ctx.strokeStyle = 'rgba(255,255,255,0.65)'; ctx.lineWidth = 1.5;
+    ctx.strokeStyle = isChefCurry2 ? 'rgba(255,220,0,0.8)' : 'rgba(255,255,255,0.65)'; ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.arc(HOOP_X, RIM_Y, RIM_R + 16, 0, Math.PI * 2); ctx.stroke();
   }
 }
@@ -801,6 +890,33 @@ function drawOnboarding() {
   ctx.restore();
 }
 
+// ── Animated crowd overlay (stand-goers bouncing in stands) ───────
+const _crowdDots = Array.from({length: 55}, (_, i) => ({
+  x: 8 + Math.random() * (GW - 16),
+  y: 20 + Math.random() * 160,
+  r: 2.5 + Math.random() * 2,
+  phase: Math.random() * Math.PI * 2,
+  spd: 0.03 + Math.random() * 0.04,
+  color: ['#FF69B4','#FFD700','#00CFFF','#FF4444','#98FB98','#FFF','#FF8C00'][i % 7],
+  alpha: 0.12 + Math.random() * 0.14,
+}));
+
+function drawAnimatedCrowd() {
+  if (S.screen !== 'playing') return;
+  const excited = S.shake > 0 || S._deuceActive || S.streak >= 3;
+  ctx.save();
+  for (const d of _crowdDots) {
+    const bobAmp = excited ? 3.5 : 1.5;
+    const bob = Math.sin(S.frame * d.spd + d.phase) * bobAmp;
+    ctx.globalAlpha = d.alpha * (excited ? 1.6 : 1);
+    ctx.fillStyle = d.color;
+    ctx.beginPath();
+    ctx.arc(d.x, d.y + bob, d.r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
 // ── Confetti + Trail + Switch Flash ─────────────────────────────
 function drawBallTrail() {
   const trail = S.ballTrail;
@@ -876,7 +992,7 @@ function drawSwitchFlash() {
 
 // ── HUD / Score Bar ──────────────────────────────────────────────
 const INFO_LINES = [
-  '🏀 HALF COURT HERO  v0.7',
+  '🏀 HALF COURT HERO  v0.9',
   '',
   '🎮 CONTROLS',
   '  Square pad — move in 3D',
@@ -891,12 +1007,16 @@ const INFO_LINES = [
   '  🌊 Swish! Nothing but net bonus',
   '  ✨ Crossover dribble move',
   '  🎯 Wide open shot bonus',
+  '  🍳 Chef Curry mode (3x3 in a row)',
+  '  🤝 Assist tracking',
+  '  🧱 Screen/pick slows defender',
   '  🙌 Alley-oop near basket',
   '  ⚡ Fast break after steal/rebound',
   '  🔥 On Fire + Heat Check streak',
   '  💥 Dunk / Layup near basket',
   '  🤙 AND ONE chance on contact',
   '  Tie game + Game Point drama',
+  '  Deuce rule: win by 2 at 10-10',
   '  Comeback mechanic',
   '  Defenders press & intercept',
   '  Career stats saved locally',
@@ -933,9 +1053,22 @@ function drawHUD() {
   ctx.fillText('🎸 NARA\'S ROOM', 80, 47);
   ctx.fillText('ALL-STARS 🏅', GW - 80, 47);
 
-  // Score differential or "TIED"
+  // Score differential / deuce indicator
   const diff = S.score[0] - S.score[1];
-  if (diff === 0) {
+  if (S._deuceActive && diff === 0) {
+    const dp = 0.6 + Math.sin(S.frame * 0.14) * 0.35;
+    ctx.fillStyle = `rgba(255,215,0,${dp})`;
+    ctx.font = 'bold 10px monospace';
+    ctx.fillText('DEUCE', GW / 2, 28);
+    ctx.font = 'bold 32px monospace';
+  } else if (S._deuceActive && Math.abs(diff) === 1) {
+    const advColor = diff > 0 ? CHARS.nara.hue : CHARS.brendan.hue;
+    const dp = 0.7 + Math.sin(S.frame * 0.14) * 0.25;
+    ctx.fillStyle = `rgba(255,215,0,${dp})`;
+    ctx.font = 'bold 9px monospace';
+    ctx.fillText('ADV', GW / 2, 28);
+    ctx.font = 'bold 32px monospace';
+  } else if (diff === 0) {
     ctx.fillStyle = 'rgba(255,255,255,0.45)';
     ctx.fillText('TIED', GW / 2, 28);
   } else {
@@ -995,6 +1128,34 @@ function drawHUD() {
     ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
     const fireLabel = S.streak >= 5 ? '🔥🔥 UNSTOPPABLE ×' + S.streak : '🔥 ON FIRE ×' + S.streak;
     ctx.fillText(fireLabel, 18, 12);
+    ctx.restore();
+  }
+
+  // Human timeout indicator (top left, tiny)
+  if (S.screen === 'playing') {
+    const toAvail = (S._humanTimeouts || 0) > 0;
+    ctx.save();
+    ctx.globalAlpha = toAvail ? 0.75 : 0.2;
+    fillRR(6, 6, 26, 12, 4, 'rgba(0,0,0,0.6)', toAvail ? '#00CFFF' : '#555', 1);
+    ctx.fillStyle = toAvail ? '#00CFFF' : '#555';
+    ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.letterSpacing = '0';
+    ctx.fillText('T/O', 19, 12);
+    ctx.restore();
+  }
+
+  // Difficulty badge (tiny, top right area)
+  {
+    const diff = S._difficulty || 'normal';
+    const diffColors = { easy: '#32CD32', normal: '#FFD700', hard: '#FF4444' };
+    const diffLabels = { easy: 'EASY', normal: 'NOR', hard: 'HARD' };
+    ctx.save();
+    ctx.globalAlpha = 0.55;
+    fillRR(341, 6, 28, 12, 4, 'rgba(0,0,0,0.6)', diffColors[diff], 1);
+    ctx.fillStyle = diffColors[diff];
+    ctx.font = 'bold 7px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.letterSpacing = '0';
+    ctx.globalAlpha = 0.75;
+    ctx.fillText(diffLabels[diff], 355, 12);
     ctx.restore();
   }
 
@@ -1212,13 +1373,18 @@ function drawTitle() {
     ctx.restore();
 
     const nameX = cx;
-    fillRR(nameX - 30, 348, 60, 28, 6, 'rgba(0,0,0,0.65)', d.hue, 1.5);
+    fillRR(nameX - 30, 348, 60, 36, 6, 'rgba(0,0,0,0.65)', d.hue, 1.5);
     ctx.fillStyle = d.hue;
     ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(d.name, nameX, 357);
     ctx.fillStyle = 'rgba(255,255,255,0.5)';
     ctx.font = '7px monospace'; ctx.letterSpacing = '0';
-    ctx.fillText(d.role.split(' ')[0], nameX, 369);
+    ctx.fillText(d.role.split(' ')[0], nameX, 368);
+    if (d.abilityEmoji) {
+      ctx.fillStyle = d.hue;
+      ctx.font = '8px monospace'; ctx.letterSpacing = '0';
+      ctx.fillText(d.abilityEmoji + ' ' + (d.ability || '').split(' ')[0], nameX, 379);
+    }
   }
 
   ctx.fillStyle = CHARS.nara.hue;
@@ -1249,9 +1415,13 @@ function drawTitle() {
   // Career wins from localStorage
   let titleBest = {};
   try { titleBest = JSON.parse(localStorage.getItem('hch_best') || '{}'); } catch(e) {}
-  if (titleBest.wins > 0) {
+  if (titleBest.wins > 0 || titleBest.losses > 0) {
     ctx.fillStyle = '#FFD700'; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center'; ctx.letterSpacing = '0';
-    ctx.fillText('🏆 CAREER WINS: ' + titleBest.wins, GW / 2, 450);
+    const wl = `${titleBest.wins || 0}W - ${titleBest.losses || 0}L`;
+    const extras = [];
+    if (titleBest.deuceWins > 0) extras.push(`⚖️×${titleBest.deuceWins}`);
+    if (titleBest.comebacks > 0) extras.push(`💪×${titleBest.comebacks}`);
+    ctx.fillText('🏆 RECORD: ' + wl + (extras.length ? '   ' + extras.join(' ') : ''), GW / 2, 450);
   }
 
   // Bouncing basketball animation in title
@@ -1302,7 +1472,7 @@ function drawGameOver() {
 
   // Ambient confetti on win screen
   if (S.confetti.length < 20 && S.frame % 3 === 0) {
-    const won2 = S.score[0] >= WIN_SCORE;
+    const won2 = S.score[0] > S.score[1];
     const colors2 = won2 ? [CHARS.nara.hue, CHARS.ethan.hue, '#FFD700', '#FFF'] : [CHARS.brendan.hue, '#FF4444', '#FFF'];
     S.confetti.push({
       x: Math.random() * GW, y: -10,
@@ -1314,10 +1484,14 @@ function drawGameOver() {
   }
   updateAndDrawConfetti();
 
-  const won = S.score[0] >= WIN_SCORE;
+  const won = S.score[0] > S.score[1];
   const color = won ? '#FFD700' : '#FF4444';
   const text  = won ? 'NARA\'S ROOM WINS!' : 'ALL-STARS WIN!';
-  const sub   = won ? '🏀 GAME! 🎸' : '😤 BLOCKED!';
+  let sub;
+  if (!won) sub = '😤 BLOCKED!';
+  else if (S._deuceActive) sub = '⚖️ DEUCE SURVIVOR! 🏆';
+  else if ((S._maxDeficit || 0) >= 4) sub = `💪 DOWN ${S._maxDeficit}, CAME BACK!`;
+  else sub = '🏀 GAME! 🎸';
 
   ctx.shadowColor = color; ctx.shadowBlur = 30;
   ctx.fillStyle = color;
@@ -1355,13 +1529,25 @@ function drawGameOver() {
   const pct = st.shots > 0 ? Math.round(st.made / st.shots * 100) : 0;
   let best = {};
   try { best = JSON.parse(localStorage.getItem('hch_best') || '{}'); } catch(e) {}
+  const twosMade = st.twos || 0;
   const statLines = [
-    ['FIELD GOALS', `${st.made}/${st.shots}  (${pct}%)`, best.fgPct ? `BEST ${best.fgPct}%` : ''],
-    ['3-POINTERS', `${st.threes || 0}`, ''],
-    ['STEALS', `${st.steals}`, ''],
-    ['BLOCKS', `${st.blocks}`, ''],
-    ['HOT STREAK', `${S.streak}`, best.streak ? `BEST ${best.streak}` : ''],
-    best.wins ? ['CAREER WINS', `${best.wins}`, ''] : null,
+    ['FG  2PT / 3PT', `${twosMade} / ${st.threes || 0}`, `${pct}% FG`],
+    ['FG %', `${st.made}/${st.shots}`, best.fgPct ? `BEST ${best.fgPct}%` : ''],
+    st.assists > 0 ? ['ASSISTS', `${st.assists}`, '🤝'] : null,
+    st.alleyOops > 0 ? ['ALLEY-OOPS', `${st.alleyOops}`, '🙌'] : null,
+    st.steals > 0 ? ['STEALS', `${st.steals}`, '🏃'] : null,
+    st.blocks > 0 ? ['BLOCKS', `${st.blocks}`, '🛡'] : null,
+    S.streak > 1 ? ['HOT STREAK', `×${S.streak}`, best.streak ? `BEST ×${best.streak}` : ''] : null,
+    (S._maxDeficit || 0) >= 2 && won ? [`COMEBACK +${S._maxDeficit}`, '💪', best.maxComeback ? `BEST +${best.maxComeback}` : ''] : null,
+    S._deuceActive && won ? ['DEUCE WIN', '⚖️', best.deuceWins ? `×${best.deuceWins}` : ''] : null,
+    (best.wins || best.losses) ? ['RECORD', `${best.wins || 0}W - ${best.losses || 0}L`, '🏆'] : null,
+    (() => {
+      const ps = S._playerScores || {};
+      const mvpId = (ps.nara || 0) >= (ps.ethan || 0) ? 'nara' : 'ethan';
+      const mvpPts = ps[mvpId] || 0;
+      if (mvpPts > 0) return [`MVP: ${CHARS[mvpId].name}`, `${mvpPts} PTS`, '⭐'];
+      return null;
+    })(),
   ].filter(Boolean);
   fillRR(GW/2 - 145, 415, 290, statLines.length * 24 + 20, 10, 'rgba(0,0,0,0.4)', 'rgba(255,255,255,0.1)', 1);
   ctx.font = '10px monospace'; ctx.letterSpacing = '0';
@@ -1418,6 +1604,17 @@ canvas.addEventListener('touchstart', e => {
     // Info button always tappable
     if (Math.hypot(x - 374, y - 14) < 18) {
       S.showInfo = !S.showInfo;
+      continue;
+    }
+    // Timeout button (top-left T/O badge: x=6-32, y=6-18)
+    if (S.screen === 'playing' && x >= 4 && x <= 36 && y >= 4 && y <= 22) {
+      if ((S._humanTimeouts || 0) > 0 && !S.paused) {
+        S._humanTimeouts--;
+        S.paused = true;
+        S.scoreFlash = { text: '⏸ TIMEOUT!', color: CHARS.nara.hue, ttl: 180 };
+        spawnThought(S.activeHuman, '💬 HUDDLE UP!');
+        setTimeout(() => { S.paused = false; }, 2500);
+      }
       continue;
     }
     // Tap anywhere else closes info panel
@@ -1574,7 +1771,18 @@ function applyKeyboard() {
 // Mouse support for desktop
 canvas.addEventListener('mousedown', e => {
   const { x, y } = toGameCoords(e.clientX, e.clientY);
-  if (x < 38 && y < 30 && S.screen === 'playing') { S.paused = !S.paused; return; }
+  if (x < 38 && y < 30 && S.screen === 'playing') {
+    // Timeout button (top-left T/O badge)
+    if (x >= 4 && x <= 36 && y >= 4 && y <= 22 && (S._humanTimeouts || 0) > 0 && !S.paused) {
+      S._humanTimeouts--;
+      S.paused = true;
+      S.scoreFlash = { text: '⏸ TIMEOUT!', color: CHARS.nara.hue, ttl: 180 };
+      spawnThought(S.activeHuman, '💬 HUDDLE UP!');
+      setTimeout(() => { S.paused = false; }, 2500);
+      return;
+    }
+    S.paused = !S.paused; return;
+  }
   if (S.paused) { S.paused = false; return; }
   if (Math.hypot(x - 374, y - 14) < 18) { S.showInfo = !S.showInfo; return; }
   if (S.showInfo) { S.showInfo = false; return; }
@@ -1644,6 +1852,7 @@ function releaseShoot() {
   if (power < 13) {
     ap.anim = 'shoot';
     spawnThought(ap.id, '👀 PUMP FAKE!');
+    S._possessionMoves = (S._possessionMoves || 0) + 1;
     for (const def of TEAM_B_IDS) {
       const dp = S.players[def];
       if (Math.hypot(ap.x - dp.x, ap.y - dp.y) < 72 && dp._jumpVy === 0 && dp.jumpY === 0) {
@@ -1659,12 +1868,16 @@ function releaseShoot() {
   const dist = Math.abs(ap.x - HOOP_X);
   if (dist > SHOT_RANGE_3 + 20) { ap.anim = 'idle'; return; }
 
-  const inGreen = power >= POWER_GREEN_LO && power <= POWER_GREEN_HI;
+  // Chef Curry mode: wider green zone when on 3pt hot streak
+  const isChefCurry = (S._human3ptStreak || 0) >= 3 && dist > SHOT_RANGE_2;
+  const greenLo = isChefCurry ? POWER_GREEN_LO - 8 : POWER_GREEN_LO;
+  const greenHi = isChefCurry ? POWER_GREEN_HI + 8 : POWER_GREEN_HI;
+  const inGreen = power >= greenLo && power <= greenHi;
   const isPerfect = power >= 60 && power <= 68;
 
   let acc, timingText;
-  if (isPerfect)        { acc = 0.95; timingText = '🎯 PERFECT!'; }
-  else if (inGreen)     { acc = 0.88; timingText = '💚 GOOD!'; }
+  if (isPerfect)        { acc = 0.95; timingText = isChefCurry ? '🍳 PERFECT!' : '🎯 PERFECT!'; }
+  else if (inGreen)     { acc = 0.88; timingText = isChefCurry ? '🍳 COOKING!' : '💚 GOOD!'; }
   else if (power < POWER_GREEN_LO) { acc = 0.12 + power * 0.006; timingText = '⬆ EARLY'; }
   else                  { acc = 0.32; timingText = '⬇ LATE'; }
 
@@ -1708,10 +1921,30 @@ function releaseShoot() {
   if (movingBack && (inGreen || isPerfect)) {
     acc = Math.min(acc + 0.04, 0.99);
     spawnThought(ap.id, '👟 STEP BACK!');
+    S._possessionMoves = (S._possessionMoves || 0) + 1;
+  }
+
+  // Fadeaway mid-range: moving backward in 2pt zone
+  const isFadeaway = ap.vx < -1.5 && dist > SHOT_RANGE_LAY && dist <= SHOT_RANGE_2;
+  if (isFadeaway && (inGreen || isPerfect)) {
+    acc = Math.min(acc + 0.03, 0.99);
+    spawnThought(ap.id, '💨 FADEAWAY!');
+  }
+
+  // Character ability bonus
+  const charData = CHARS[ap.id];
+  if (charData._3ptBonus > 0 && dist > SHOT_RANGE_2) {
+    acc = Math.min(acc + charData._3ptBonus, 0.99);
   }
 
   spawnThought(ap.id, timingText);
-  if (timingText.includes('DUNK')) { sfxDunk(); spawnCrowdBurst([CHARS.nara.hue, '#FFD700', '#FF8C00', '#FFF']); } else sfxShoot();
+  if (timingText.includes('DUNK')) {
+    sfxDunk();
+    spawnCrowdBurst([CHARS.nara.hue, '#FFD700', '#FF8C00', '#FFF']);
+    // Dramatic dunk jump
+    ap._jumpVy = -13;
+    ap.anim = 'jump';
+  } else sfxShoot();
   S.shotClock = 600;
   S.stats.shots++;
 
@@ -1722,6 +1955,17 @@ function releaseShoot() {
   fireBallShot(ap.x, ap.y + ap.jumpY - 55, made, dist);
   if (isPerfect) S.ball._perfect = true;
   S.ball._fromX = ap.x;
+  // Flash ring at release point based on timing quality
+  if (isPerfect || inGreen) {
+    const flashColor = isPerfect ? '#00FF88' : '#80FF80';
+    for (let i = 0; i < 6; i++) {
+      S.confetti.push({ x: ap.x + (Math.random()-0.5)*20, y: ap.y - 30 + (Math.random()-0.5)*20, vx: (Math.random()-0.5)*4, vy: -2 - Math.random()*2, color: flashColor, size: 3 + Math.random()*3, ttl: 18, rot: 0, dRot: 0.3 });
+    }
+    // Perfect timing: brief screen overlay flash
+    if (isPerfect) {
+      S._perfectFlash = { alpha: 0.18, color: '#00FF88' };
+    }
+  }
   setTimeout(() => {
     if (S.players[ap.id] && S.players[ap.id].anim === 'shoot')
       S.players[ap.id].anim = 'idle';
@@ -1781,6 +2025,7 @@ function handlePassAction() {
   if (isAlleyOop) S.ball._alleyOop = true;
   if (isBehindBack && !isAlleyOop) {
     spawnThought(ap.id, '🔄 BEHIND BACK!');
+    S._possessionMoves = (S._possessionMoves || 0) + 1;
     S.ball.vy -= 1; // slightly higher arc for style
   }
 
@@ -1791,6 +2036,7 @@ function handlePassAction() {
   ap._cutTarget = { x: cutX, y: cutY };
   ap.anim = 'run';
 
+  S._lastPasser = ap.id;
   S.activeHuman = teammate;
   spawnThought(teammate, isAlleyOop ? '🙌' : '🏀');
   S.switchFlash = { name: CHARS[teammate].name, color: CHARS[teammate].hue, ttl: 70 };
@@ -1810,7 +2056,9 @@ function handleStealAction() {
   ap._stealCooldown = 45; // ~0.75s
   ap._stealRing = 12; // visual ring frames
 
-  if (dist < 60) {
+  // Ethan's lockdown ability gives wider steal range
+  const stealRange = 60 * (1 + (CHARS[S.activeHuman]._stealBonus || 0));
+  if (dist < stealRange) {
     // Catch-up boost: easier to steal when losing
     const catchup = (S.score[1] - S.score[0]) >= 3 ? 1.18 : 1.0;
     const success = Math.random() < 0.45 * catchup;
@@ -1828,7 +2076,7 @@ function handleStealAction() {
       spawnThought(S.activeHuman, '❌ MISS');
       sfxMiss();
     }
-  } else {
+  } else if (dist < stealRange + 20) {
     spawnThought(S.activeHuman, 'TOO FAR');
   }
 }
@@ -1943,7 +2191,8 @@ function updateBall() {
     for (const def of defTeam) {
       if (def === b._passTarget) continue;
       const dp = S.players[def];
-      if (Math.hypot(b.x - dp.x, b.y - (dp.y - 35)) < 42) {
+      const distToPass = Math.hypot(b.x - dp.x, b.y - (dp.y - 35));
+      if (distToPass < 42) {
         const pickRate = S._difficulty === 'easy' ? 0.007 : S._difficulty === 'hard' ? 0.022 : 0.013;
         if (Math.random() < pickRate) {
           b.inAir = false; b._pass = false; b._passTarget = null;
@@ -1951,7 +2200,13 @@ function updateBall() {
           S.possession = S.possession === 'a' ? 'b' : 'a';
           spawnThought(def, '😤 PICK!');
           sfxSteal();
+          if (S.possession === 'a') S._fastBreak = 120;
           return;
+        }
+      } else if (distToPass < 65 && S.possession === 'b' && TEAM_A_IDS.includes(def)) {
+        // Visual interception opportunity hint
+        if (S.frame % 8 === 0) {
+          S.confetti.push({ x: dp.x, y: dp.y - 20, vx: 0, vy: -0.8, color: '#FFD700', size: 2, ttl: 8, rot: 0, dRot: 0 });
         }
       }
     }
@@ -2001,6 +2256,29 @@ function scorePoint() {
   const scorer = team === 'a' ? S.activeHuman : TEAM_B_IDS.find(id => S.players[id].hasBall) || 'brendan';
   spawnThought(scorer, CHARS[scorer].quips[Math.floor(Math.random() * 4)]);
 
+  // Nara's signature: musical note particles on any score
+  if (scorer === 'nara') {
+    const notes = ['♪','♩','♫','🎸'];
+    for (let ni = 0; ni < 5; ni++) {
+      S.thoughts.push({
+        x: S.players.nara.x + (Math.random()-0.5)*40,
+        y: S.players.nara.y - 60 - Math.random()*60,
+        text: notes[ni % notes.length],
+        ttl: 40 + Math.random()*25,
+        maxTtl: 65,
+        dx: (Math.random()-0.5)*1.5,
+      });
+    }
+  }
+
+  // Assist tracking: passer gets credit if they passed within last 4 seconds
+  if (team === 'a' && S._lastPasser && S._lastPasser !== scorer) {
+    S.stats.assists++;
+    if (pts === 3) spawnThought(S._lastPasser, '🎯 ASSIST!');
+    else spawnThought(S._lastPasser, '🤝 ASSIST!');
+  }
+  S._lastPasser = null; // reset
+
   // Buzzer beater bonus
   const isBuzzer = S.possession === 'a' && S.shotClock <= 55;
   const isSwish = !b._rimHit;
@@ -2016,7 +2294,8 @@ function scorePoint() {
   }
 
   sfxScore(pts);
-  const crowdIntensity = isBuzzer ? 1 : pts === 3 ? 0.7 : 0.4;
+  const deuceBonus = S._deuceActive ? 0.3 : 0;
+  const crowdIntensity = Math.min(1.0, (isBuzzer ? 1 : pts === 3 ? 0.7 : 0.4) + deuceBonus);
   setTimeout(() => sfxCrowd(crowdIntensity), 350);
   S.shake = isBuzzer ? 20 : 12;
   // Crowd burst particles on big plays
@@ -2029,9 +2308,19 @@ function scorePoint() {
   S.hoopFlash = 25;
   if (navigator.vibrate) navigator.vibrate(isBuzzer ? [80, 40, 80] : pts === 3 ? [30, 20, 50] : 45);
   if (team === 'a') S.stats.made++;
+  if (team === 'a') {
+    S._playerScores = S._playerScores || { nara: 0, ethan: 0 };
+    S._playerScores[scorer] = (S._playerScores[scorer] || 0) + pts;
+  }
+  if (team === 'a' && pts === 2) S.stats.twos = (S.stats.twos || 0) + 1;
   if (team === 'a' && pts === 3) {
     S.stats.threes++;
     S._human3ptStreak = (S._human3ptStreak || 0) + 1;
+    // CHEF CURRY: 3 3s in a row = special bonus mode
+    if (S._human3ptStreak === 3) {
+      setTimeout(() => { S.scoreFlash = { text: '🍳 CHEF CURRY MODE!', color: '#FFD700', ttl: 100 }; }, 1000);
+      spawnThought(scorer, '🍳 COOKING!');
+    }
   } else if (team === 'a') {
     S._human3ptStreak = 0;
   }
@@ -2065,10 +2354,38 @@ function scorePoint() {
     if (prevDeficit >= 3) {
       setTimeout(() => { S.scoreFlash = { text: '💪 COMEBACK!', color: CHARS.nara.hue, ttl: 80 }; }, 800);
     }
+    // Highlight reel: 3+ fancy moves in one possession
+    if ((S._possessionMoves || 0) >= 3) {
+      setTimeout(() => { S.scoreFlash = { text: '🎬 HIGHLIGHT REEL!', color: '#FF69B4', ttl: 90 }; }, 1000);
+      sfxCrowd(0.9);
+    }
+    S._possessionMoves = 0;
   } else {
     S.streak = 0;
-    const taunts = ['😤 TOO EASY!', '🥁 BOOM!', '💪 SIT DOWN!', '😎 NIGHT NIGHT!'];
+    const cpuLead = S.score[1] - S.score[0];
+    let taunts;
+    if (cpuLead >= 3)       taunts = ['😤 TOO EASY!', '🎯 LOCK IN!', '💀 OVER!', '😂 YIKES!'];
+    else if (cpuLead <= -3) taunts = ['💪 BACK!', '😤 NOT TODAY!', '🔥 MY HOUSE!', '⚡ WAKE UP!'];
+    else if (S._deuceActive) taunts = ['😤 DEUCE ME!', '🥁 PRESSURE!', '🎯 BOOM!', '💪 DEUCE!'];
+    else taunts = ['😤 TOO EASY!', '🥁 BOOM!', '💪 SIT DOWN!', '😎 NIGHT NIGHT!'];
     setTimeout(() => spawnThought(scorer, taunts[Math.floor(Math.random() * taunts.length)]), 600);
+    // Double taunt on 3pt by CPU
+    if (pts === 3) setTimeout(() => spawnThought(scorer === 'brendan' ? 'james' : 'brendan', '🔥 FIRE!'), 900);
+  }
+
+  // Milestone announcements (first team to 5, first team to 8)
+  const newScore = S.score[team === 'a' ? 0 : 1];
+  const oppScore = S.score[team === 'a' ? 1 : 0];
+  if ((newScore === 5 || newScore === 8) && oppScore < newScore) {
+    const mText = team === 'a' ? `🎸 FIRST TO ${newScore}!` : `💀 THEY HIT ${newScore}`;
+    const mColor = team === 'a' ? CHARS.nara.hue : CHARS.brendan.hue;
+    setTimeout(() => { if (S.screen === 'playing') S.scoreFlash = { text: mText, color: mColor, ttl: 65 }; }, 1600);
+  }
+  // Halftime when both teams reach 5
+  if (!S._halftimeDone && S.score[0] >= 5 && S.score[1] >= 5) {
+    S._halftimeDone = true;
+    setTimeout(() => { if (S.screen === 'playing') S.scoreFlash = { text: '🏟 HALFTIME — 5-5!', color: '#FFFFFF', ttl: 90 }; }, 1400);
+    setTimeout(() => sfxCrowd(0.55), 1600);
   }
 
   const teamIds = team === 'a' ? TEAM_A_IDS : TEAM_B_IDS;
@@ -2097,15 +2414,30 @@ function scorePoint() {
     });
   }
 
+  // Deuce rule: activates only when BOTH teams are exactly tied at WIN_SCORE-1
+  if (!S._deuceActive && S.score[0] === WIN_SCORE - 1 && S.score[1] === WIN_SCORE - 1) {
+    S._deuceActive = true;
+    setTimeout(() => { S.scoreFlash = { text: '🔄 DEUCE — WIN BY 2!', color: '#FFD700', ttl: 100 }; }, 1000);
+    setTimeout(() => sfxDeuceTension(), 1100);
+  }
+
   // Tie game drama
   if (S.score[0] === S.score[1] && S.score[0] > 0) {
-    setTimeout(() => { S.scoreFlash = { text: '⚖️ TIE GAME!', color: '#FFFFFF', ttl: 80 }; }, 1200);
+    if (!S._deuceActive) {
+      setTimeout(() => { S.scoreFlash = { text: '⚖️ TIE GAME!', color: '#FFFFFF', ttl: 80 }; }, 1200);
+    } else {
+      setTimeout(() => { S.scoreFlash = { text: '⚖️ DEUCE!', color: '#FFD700', ttl: 90 }; }, 1200);
+    }
   }
-  // Game point
-  else if (S.score[0] === WIN_SCORE - 1 && team === 'a') {
+  // Game point / advantage
+  else if (!S._deuceActive && S.score[0] === WIN_SCORE - 1 && team === 'a') {
     setTimeout(() => { S.scoreFlash = { text: '🏀 GAME POINT!', color: CHARS.nara.hue, ttl: 90 }; }, 1200);
-  } else if (S.score[1] === WIN_SCORE - 1 && team === 'b') {
+  } else if (!S._deuceActive && S.score[1] === WIN_SCORE - 1 && team === 'b') {
     setTimeout(() => { S.scoreFlash = { text: '⚠️ GAME POINT!', color: CHARS.brendan.hue, ttl: 90 }; }, 1200);
+  } else if (S._deuceActive && S.score[0] - S.score[1] === 1) {
+    setTimeout(() => { S.scoreFlash = { text: '💛 ADVANTAGE NARA\'S ROOM!', color: CHARS.nara.hue, ttl: 90 }; }, 1200);
+  } else if (S._deuceActive && S.score[1] - S.score[0] === 1) {
+    setTimeout(() => { S.scoreFlash = { text: '⚠️ ADVANTAGE ALL-STARS!', color: CHARS.brendan.hue, ttl: 90 }; }, 1200);
   }
 
   // CPU timeout when losing big
@@ -2124,16 +2456,40 @@ function scorePoint() {
 
   resetBallAfterScore(team === 'a' ? 'b' : 'a');
 
-  if (S.score[0] >= WIN_SCORE || S.score[1] >= WIN_SCORE) {
+  const aWins = S._deuceActive
+    ? S.score[0] > S.score[1] && S.score[0] - S.score[1] >= 2
+    : S.score[0] >= WIN_SCORE;
+  const bWins = S._deuceActive
+    ? S.score[1] > S.score[0] && S.score[1] - S.score[0] >= 2
+    : S.score[1] >= WIN_SCORE;
+
+  if (aWins || bWins) {
+    // Special win message for deuce winner
+    if (aWins && S._deuceActive) {
+      S.scoreFlash = { text: '🏆 GAME WINNER!!!', color: '#FFD700', ttl: 150 };
+      sfxVictoryFanfare();
+      // Mega confetti burst
+      for (let ci = 0; ci < 80; ci++) {
+        S.confetti.push({ x: Math.random() * GW, y: GH * 0.3 + Math.random() * GH * 0.3, vx: (Math.random()-0.5)*10, vy: -Math.random()*12 - 3, color: ['#FFD700','#FF69B4',CHARS.nara.hue,'#FFF','#00CFFF'][ci % 5], size: 5 + Math.random()*6, ttl: 90 + Math.random()*60, rot: Math.random()*Math.PI*2, dRot: (Math.random()-0.5)*0.4 });
+      }
+    }
     setTimeout(() => {
       S.screen = 'gameover';
-      // Save best stats to localStorage
+      if (aWins && !S._deuceActive) sfxVictoryFanfare();
       try {
         const best = JSON.parse(localStorage.getItem('hch_best') || '{}');
         if (!best.streak || S.streak > best.streak) best.streak = S.streak;
         const pct = S.stats.shots > 0 ? Math.round(S.stats.made / S.stats.shots * 100) : 0;
         if (!best.fgPct || pct > best.fgPct) best.fgPct = pct;
-        if (S.score[0] >= WIN_SCORE) best.wins = (best.wins || 0) + 1;
+        if (aWins) {
+          best.wins = (best.wins || 0) + 1;
+          // Track comeback wins
+          if ((S._maxDeficit || 0) >= 3) best.comebacks = (best.comebacks || 0) + 1;
+          if (S._deuceActive) best.deuceWins = (best.deuceWins || 0) + 1;
+        } else {
+          best.losses = (best.losses || 0) + 1;
+        }
+        if ((S._maxDeficit || 0) > (best.maxComeback || 0)) best.maxComeback = S._maxDeficit;
         localStorage.setItem('hch_best', JSON.stringify(best));
       } catch(e) {}
     }, 1500);
@@ -2156,6 +2512,7 @@ function resetBallAfterScore(nextPossession) {
   }
 
   S._fastBreak = 0;
+  S._possessionMoves = 0;
   S.ball._alleyOop = false;
   S.ball._fromX = undefined;
   S.ball._rimHit = false;
@@ -2268,11 +2625,19 @@ function updatePlayers() {
           const stumbled = TEAM_B_IDS.find(id => Math.hypot(S.players[id].x - ap.x, S.players[id].y - ap.y) < 55 && S.players[id].jumpY === 0);
           if (stumbled) {
             spawnThought(ap.id, '🔥 ANKLE BREAKER!');
-            spawnThought(stumbled, '😵');
-            S.players[stumbled]._stealCooldown = 90; // can't steal briefly
-            S.players[stumbled].anim = 'land'; // stumble anim
+            S._possessionMoves = (S._possessionMoves || 0) + 2; // ankle breaker = 2 moves
+            spawnThought(stumbled, '😵 BROKEN!');
+            S.players[stumbled]._stealCooldown = 110;
+            S.players[stumbled].anim = 'land';
             S.players[stumbled].landStartFrame = S.frame;
-            setTimeout(() => { if (S.players[stumbled]) S.players[stumbled].anim = 'idle'; }, 700);
+            S.players[stumbled]._ankleStun = 90; // prevent movement
+            S.scoreFlash = { text: '💥 ANKLE BREAKER!', color: CHARS[ap.id].hue, ttl: 55 };
+            sfxCrowd(0.45);
+            // Gold sparks at stumbler's feet
+            for (let si = 0; si < 8; si++) {
+              S.confetti.push({ x: S.players[stumbled].x + (Math.random()-0.5)*16, y: S.players[stumbled].y, vx: (Math.random()-0.5)*4, vy: -2 - Math.random()*3, color: '#FFD700', size: 3 + Math.random()*2, ttl: 20, rot: 0, dRot: 0.4 });
+            }
+            setTimeout(() => { if (S.players[stumbled]) { S.players[stumbled].anim = 'idle'; S.players[stumbled]._ankleStun = 0; } }, 900);
           } else {
             spawnThought(ap.id, '✨ CROSSOVER!');
           }
@@ -2426,13 +2791,18 @@ function updateAIDefense() {
   brendan.aiTimer++;
   james.aiTimer++;
 
+  // Ankle stun: frozen after ankle-breaker
+  if (brendan._ankleStun > 0) { brendan._ankleStun--; return; }
+  if (james._ankleStun > 0) { james._ankleStun--; return; }
+
   // Brendan pressures the carrier — stays close, between carrier and basket
   // Tighten perimeter if human is shooting a lot of 3s
   const backoffB = (S._human3ptStreak >= 2) ? 16 : 28;
   const targetBX = Math.max(carrier.x + backoffB, HOOP_X - 35);
   const bDx = targetBX - brendan.x;
   const bDy = (carrier.y - 8) - brendan.y;
-  const bSpeed = carrier.vx !== 0 ? 3.0 : 2.2;
+  const cpuRubberSpd = (S.score[0] - S.score[1]) >= 4 ? 1.15 : 1.0;
+  const bSpeed = (carrier.vx !== 0 ? 3.0 : 2.2) * cpuRubberSpd;
   if (Math.abs(bDx) > 8) {
     brendan.x += Math.sign(bDx) * bSpeed;
     brendan.anim = 'run';
@@ -2444,6 +2814,16 @@ function updateAIDefense() {
   if (Math.abs(bDy) > 8) brendan.y += Math.sign(bDy) * 1.9;
   brendan.x = Math.max(20, Math.min(340, brendan.x));
   brendan.y = Math.max(COURT_FAR_Y, Math.min(COURT_NEAR_Y, brendan.y));
+
+  // Screen / pick: if the off-ball human is close to Brendan, screen happens
+  const screenerIds = TEAM_A_IDS.filter(id => id !== S.activeHuman);
+  for (const sid of screenerIds) {
+    const screenerDist = Math.hypot(S.players[sid].x - brendan.x, S.players[sid].y - brendan.y);
+    if (screenerDist < 35 && brendan.jumpY === 0) {
+      brendan.x -= Math.sign(bDx) * 0.8; // Brendan slowed/pushed back
+      if (screenerDist < 25 && S.frame % 90 === 0) spawnThought(sid, '🧱 SCREEN!');
+    }
+  }
 
   // Pick behavior: if carrier walks into Brendan, push them back slightly
   const distToBrendan = Math.hypot(carrier.x - brendan.x, carrier.y - brendan.y);
@@ -2622,7 +3002,10 @@ function aiShoot(p) {
   const diffMult = S._difficulty === 'easy' ? 0.55 : S._difficulty === 'hard' ? 1.35 : 1.0;
   // Mercy mode: ease off when CPU leads by 5+
   const mercyMult = (S.score[1] - S.score[0]) >= 5 ? 0.72 : 1.0;
-  const acc  = (dist < SHOT_RANGE_LAY ? 0.75 : dist < SHOT_RANGE_2 ? 0.55 : 0.35) * diffMult * mercyMult;
+  // Rubber-band: CPU gets boost when trailing by 4+ (desperation mode)
+  const deficit = S.score[0] - S.score[1];
+  const rubberMult = deficit >= 4 ? (1 + deficit * 0.04) : 1.0;
+  const acc  = (dist < SHOT_RANGE_LAY ? 0.75 : dist < SHOT_RANGE_2 ? 0.55 : 0.35) * diffMult * mercyMult * rubberMult;
   const made = Math.random() < Math.min(0.96, acc);
 
   p.anim = 'shoot';
@@ -2648,7 +3031,8 @@ function aiShoot(p) {
         S.ball.x = S.players.nara.x;
         S.ball.y = FLOOR_Y - 30;
         S._fastBreak = 120;
-        spawnThought('nara', '🏀 REBOUND!');
+        spawnThought('nara', S._deuceActive ? '🔥 DEUCE BOARD!' : '🏀 REBOUND!');
+        if (S._deuceActive) setTimeout(() => sfxCrowd(0.5), 200);
       }
     }, 1800);
   }
@@ -2748,6 +3132,22 @@ function loop() {
     spawnThought(S.activeHuman, '🔥 HEAT CHECK!');
   }
 
+  // Hot streak sparkle particles
+  if (S.streak >= 3 && S.frame % 4 === 0) {
+    const hp = S.players[S.activeHuman];
+    const sparkColor = S.streak >= 5 ? '#FF3300' : '#FF9900';
+    S.confetti.push({
+      x: hp.x + (Math.random() - 0.5) * 30,
+      y: hp.y + hp.jumpY - 20 - Math.random() * 120,
+      vx: (Math.random() - 0.5) * 2,
+      vy: -1 - Math.random() * 2,
+      color: sparkColor,
+      size: 2 + Math.random() * 3,
+      ttl: 20 + Math.random() * 15,
+      rot: 0, dRot: 0.2
+    });
+  }
+
   // Shot clock
   if (S.possession === 'a' && !S.ball.inAir && S.pauseTimer <= 0) {
     S.shotClock = Math.max(0, S.shotClock - 1);
@@ -2763,6 +3163,10 @@ function loop() {
     S.shotClock = 600; // reset when CPU has ball
   }
 
+  // Track max deficit human faced (for comeback stat)
+  const curDeficit = S.score[1] - S.score[0];
+  if (curDeficit > 0) S._maxDeficit = Math.max(S._maxDeficit || 0, curDeficit);
+
   // ── Draw ────────────────────────────────────────────────────────
   ctx.save();
   if (S.shake > 0) {
@@ -2775,6 +3179,7 @@ function loop() {
     drawSky();
     drawCrowd();
   }
+  drawAnimatedCrowd();
   drawFloor();
   drawHoop();
 
@@ -2786,6 +3191,7 @@ function loop() {
   }
 
   drawShotTrajectory();
+  drawShotTypeLabel();
   drawBallTrail();
   drawBall();
   updateAndDrawConfetti();
@@ -2823,29 +3229,59 @@ function loop() {
     vg.addColorStop(1, `rgba(${humanGP ? '40,0,80' : '80,10,0'},${intensity})`);
     ctx.fillStyle = vg;
     ctx.fillRect(0, 0, GW, GH);
+    // Deuce: gold border pulses around entire screen
+    if (S._deuceActive) {
+      const dp = 0.04 + Math.sin(S.frame * 0.12) * 0.03;
+      ctx.save();
+      ctx.globalAlpha = dp;
+      ctx.strokeStyle = '#FFD700';
+      ctx.lineWidth = 8;
+      ctx.strokeRect(4, 4, GW - 8, GH - 8);
+      ctx.restore();
+    }
     // Clutch banner when both on game point
     if (clutch && S.frame % 180 < 90) {
       const cp = S.frame % 180 / 90;
       const ca = cp < 0.3 ? cp / 0.3 : cp > 0.7 ? (1 - cp) / 0.3 : 1;
       ctx.save();
       ctx.globalAlpha = ca * 0.75;
-      ctx.fillStyle = '#FF2244';
+      ctx.fillStyle = S._deuceActive ? '#FFD700' : '#FF2244';
       ctx.font = 'bold 12px monospace'; ctx.letterSpacing = '0.2em';
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText('🔥 CLUTCH TIME 🔥', GW / 2, 72);
+      ctx.fillText(S._deuceActive ? '⚖️ DEUCE — WIN BY 2 ⚖️' : '🔥 CLUTCH TIME 🔥', GW / 2, 72);
       ctx.restore();
     }
   }
 
-  // 3pt range glow under player when in 3pt range
+  // Perfect timing flash overlay
+  if (S._perfectFlash && S._perfectFlash.alpha > 0) {
+    ctx.save();
+    ctx.globalAlpha = S._perfectFlash.alpha;
+    ctx.fillStyle = S._perfectFlash.color;
+    ctx.fillRect(0, 0, GW, GH);
+    ctx.restore();
+    S._perfectFlash.alpha -= 0.015;
+    if (S._perfectFlash.alpha <= 0) S._perfectFlash = null;
+  }
+
+  // Zone glow under player based on position
   if (S.possession === 'a') {
     const ap = S.players[S.activeHuman];
     const d = Math.abs(ap.x - HOOP_X);
     if (d > SHOT_RANGE_2) {
+      // 3pt zone — golden glow
       ctx.save();
       ctx.globalAlpha = 0.18 + Math.sin(S.frame * 0.1) * 0.05;
       ctx.fillStyle = '#FFD700';
       ctx.beginPath(); ctx.ellipse(ap.x, ap.y + 6, 22, 7, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.restore();
+    } else if (d < SHOT_RANGE_LAY && ap.hasBall) {
+      // In the paint — red zone glow
+      ctx.save();
+      ctx.globalAlpha = 0.12 + Math.sin(S.frame * 0.18) * 0.06;
+      ctx.fillStyle = '#FF4444';
+      ctx.beginPath(); ctx.ellipse(ap.x, ap.y + 6, 26, 9, 0, 0, Math.PI * 2); ctx.fill();
       ctx.globalAlpha = 1;
       ctx.restore();
     }
