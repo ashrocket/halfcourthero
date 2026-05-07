@@ -127,6 +127,16 @@ function sfxAndOne() {
   setTimeout(() => playTone(494, 0.14, 'square', 0.12), 80);
   setTimeout(() => playTone(659, 0.16, 'sine', 0.14), 170);
 }
+function sfxTurnaround() {
+  // Smooth spinning sound — rising tone
+  playTone(523, 0.08, 'sine', 0.07);
+  setTimeout(() => playTone(659, 0.10, 'sine', 0.08), 70);
+}
+function sfxPullUp3() {
+  // Crisp pull-up — two sharp notes
+  playTone(880, 0.07, 'square', 0.09);
+  setTimeout(() => playTone(1047, 0.09, 'square', 0.08), 55);
+}
 function sfxFloater() {
   // Light scooping sound — rising then falling tone
   playTone(440, 0.08, 'sine', 0.06);
@@ -1648,6 +1658,10 @@ function drawGameOver() {
     (S._maxLead || 0) >= 4 ? [`BIGGEST LEAD`, `+${S._maxLead}`, '📈'] : null,
     S._deuceActive && won ? ['DEUCE WIN', '⚖️', best.deuceWins ? `×${best.deuceWins}` : ''] : null,
     (best.wins || best.losses) ? ['RECORD', `${best.wins || 0}W - ${best.losses || 0}L`, '🏆'] : null,
+    won && pct === 100 && st.shots >= 5 ? ['PERFECT GAME', '🎯', '100% FG!'] : null,
+    won && (st.steals || 0) >= 3 ? ['LOCKDOWN D', `${st.steals} STEALS`, '🔒'] : null,
+    won && (st.threes || 0) >= 4 ? ['COLD BLOODED', `${st.threes}x 3PT`, '🧊'] : null,
+    won && (st.alleyOops||0) + (st.assists||0) >= 4 ? ['SHOWTIME', `${(st.alleyOops||0)+(st.assists||0)} PLAYS`, '🎬'] : null,
     (() => {
       const ps = S._playerScores || {};
       const mvpId = (ps.nara || 0) >= (ps.ethan || 0) ? 'nara' : 'ethan';
@@ -2112,6 +2126,10 @@ function releaseShoot() {
     ap.anim = 'jump';
   } else if (isFloater) {
     sfxFloater();
+  } else if (isTurnaround) {
+    sfxTurnaround();
+  } else if (isPullUp3) {
+    sfxPullUp3();
   } else sfxShoot();
   S.shotClock = 600;
   S.stats.shots++;
@@ -2467,7 +2485,7 @@ function scorePoint() {
   const scorer = team === 'a' ? S.activeHuman : TEAM_B_IDS.find(id => S.players[id].hasBall) || 'brendan';
   spawnThought(scorer, CHARS[scorer].quips[Math.floor(Math.random() * 4)]);
 
-  // Nara's signature: musical note particles on any score
+  // Character signature celebrations
   if (scorer === 'nara') {
     const notes = ['♪','♩','♫','🎸'];
     for (let ni = 0; ni < 5; ni++) {
@@ -2478,6 +2496,22 @@ function scorePoint() {
         ttl: 40 + Math.random()*25,
         maxTtl: 65,
         dx: (Math.random()-0.5)*1.5,
+      });
+    }
+  } else if (scorer === 'brendan' && dist < SHOT_RANGE_LAY) {
+    // Brendan dunk: drum beat particles (orange/red bursts)
+    for (let di = 0; di < 8; di++) {
+      const ang = (di / 8) * Math.PI * 2;
+      S.confetti.push({ x: S.players.brendan.x, y: S.players.brendan.y - 40, vx: Math.cos(ang) * 4, vy: Math.sin(ang) * 4 - 3, color: di % 2 === 0 ? '#FF6B35' : '#FFD700', size: 4, ttl: 22, rot: 0, dRot: 0.3 });
+    }
+  } else if (scorer === 'james' && pts === 3) {
+    // James 3pt: keyboard keys floating up (purple/white)
+    const keys = ['♩', '🎹', '♪', '💜'];
+    for (let ki = 0; ki < 4; ki++) {
+      S.thoughts.push({
+        x: S.players.james.x + (ki - 2) * 14,
+        y: S.players.james.y - 50 - Math.random()*30,
+        text: keys[ki], ttl: 35, maxTtl: 35, dx: (ki - 1.5) * 0.4,
       });
     }
   }
@@ -2748,6 +2782,7 @@ function resetBallAfterScore(nextPossession) {
   S.ball._alleyOop = false;
   S.ball._fromX = undefined;
   S.ball._rimHit = false;
+  S.ball._floater = false;
 
   for (const id of TEAM_A_IDS.concat(TEAM_B_IDS)) {
     S.players[id].jumpY = 0; S.players[id]._jumpVy = 0;
@@ -2761,6 +2796,7 @@ function resetBallAfterScore(nextPossession) {
     S.players[id]._faked = false;
     S.players[id]._givingAndGoing = false;
     S.players[id]._postUp = false;
+    S.players[id]._putbackBonus = false;
   }
 
   if (nextPossession === 'a') {
@@ -3425,20 +3461,40 @@ function loop() {
     spawnThought(S.activeHuman, '🔥 HEAT CHECK!');
   }
 
-  // Hot streak sparkle particles
-  if (S.streak >= 3 && S.frame % 4 === 0) {
-    const hp = S.players[S.activeHuman];
-    const sparkColor = S.streak >= 5 ? '#FF3300' : '#FF9900';
-    S.confetti.push({
-      x: hp.x + (Math.random() - 0.5) * 30,
-      y: hp.y + hp.jumpY - 20 - Math.random() * 120,
-      vx: (Math.random() - 0.5) * 2,
-      vy: -1 - Math.random() * 2,
-      color: sparkColor,
-      size: 2 + Math.random() * 3,
-      ttl: 20 + Math.random() * 15,
-      rot: 0, dRot: 0.2
+  // Ambient room notes: musical notes float up from sides occasionally
+  if (S.frame % 180 === 0 && Math.random() < 0.6) {
+    const noteChars = ['♪','♩','♫','🎵','🎸'];
+    const side = Math.random() < 0.5 ? 8 + Math.random() * 15 : GW - 8 - Math.random() * 15;
+    const noteColor = [CHARS.nara.hue, '#FFD700', '#FF69B4', '#00CFFF'][Math.floor(Math.random() * 4)];
+    S.thoughts.push({
+      x: side, y: FLOOR_Y - 20 - Math.random() * 80,
+      text: noteChars[Math.floor(Math.random() * noteChars.length)],
+      ttl: 60 + Math.random() * 40, maxTtl: 100,
+      dx: (Math.random() - 0.5) * 0.4,
     });
+  }
+
+  // Hot streak sparkle particles — more intense at higher streaks
+  const streakInterval = S.streak >= 5 ? 2 : 4;
+  if (S.streak >= 3 && S.frame % streakInterval === 0) {
+    const hp = S.players[S.activeHuman];
+    const count = S.streak >= 5 ? 2 : 1;
+    for (let si = 0; si < count; si++) {
+      const hue = S.streak >= 5 ? (S.frame * 8 + si * 60) % 360 : null;
+      const sparkColor = S.streak >= 5
+        ? `hsl(${hue},100%,60%)`
+        : '#FF9900';
+      S.confetti.push({
+        x: hp.x + (Math.random() - 0.5) * 30,
+        y: hp.y + hp.jumpY - 20 - Math.random() * 140,
+        vx: (Math.random() - 0.5) * 3,
+        vy: -1.5 - Math.random() * 2.5,
+        color: sparkColor,
+        size: (S.streak >= 5 ? 3 : 2) + Math.random() * 3,
+        ttl: 20 + Math.random() * 15,
+        rot: 0, dRot: 0.2
+      });
+    }
   }
 
   // Shot clock
@@ -3558,6 +3614,16 @@ function loop() {
   }
 
   ctx.restore(); // end shake transform
+
+  // CPU run ominous pulse: low red wash when on a 5-0 run
+  if ((S._cpuStreak || 0) >= 5) {
+    const runPulse = 0.04 + Math.sin(S.frame * 0.12) * 0.025;
+    ctx.save();
+    ctx.globalAlpha = runPulse;
+    ctx.fillStyle = 'rgba(180,0,0,1)';
+    ctx.fillRect(0, 0, GW, GH);
+    ctx.restore();
+  }
 
   // Hard mode: persistent dark vignette
   if (S._difficulty === 'hard') {
