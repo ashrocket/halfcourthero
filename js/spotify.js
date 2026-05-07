@@ -77,6 +77,11 @@ const SpotifyPlayer = {
     this._player.on('ready', ({ device_id }) => {
       this._deviceId = device_id;
       window._spotifyReady = true;
+      if (window._pendingPlay) {
+        window._pendingPlay = false;
+        SpotifyPlayer.play();
+        window._musicPlaying = true;
+      }
     });
 
     this._player.on('player_state_changed', state => {

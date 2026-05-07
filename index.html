@@ -342,7 +342,7 @@ const CHARS = {
     quips: ['🎸 YEAH!', '💪 LOW!', 'NICE!', '🔥 FIRE!'],
     // Abilities: +steal range 20%, faster defender coverage
     ability: 'LOCKDOWN', abilityEmoji: '🛡',
-    _3ptBonus: 0, _spd: 1.05, _stealBonus: 0.20, _h: 185
+    _3ptBonus: 0, _spd: 1.05, _stealBonus: 0.20, _h: 180
   },
   brendan: {
     name: 'BRENDAN', fullName: 'BRENDAN JONES', role: 'DRUMS',
@@ -360,7 +360,7 @@ const CHARS = {
     hairStyle: 'glasses', hue: '#9B59B6',
     quips: ['🎹 NICE!', '😎 WILL!', '💜 YES!', '🎯 PERFECT!'],
     ability: 'DEEP RANGE', abilityEmoji: '🔭',
-    _3ptBonus: 0.08, _spd: 0.95, _stealBonus: 0, _h: 150
+    _3ptBonus: 0.08, _spd: 0.95, _stealBonus: 0, _h: 165
   }
 };
 let TEAM_A_IDS = ['nara', 'ethan'];
@@ -2082,8 +2082,12 @@ function startGameWithSelection() {
   S._playerScores = { [TEAM_A_IDS[0]]: 0, [TEAM_A_IDS[1]]: 0 };
   S.screen = 'playing';
   if (window._spotifyConnected && !window._musicPlaying) {
-    SpotifyPlayer.play();
-    window._musicPlaying = true;
+    if (SpotifyPlayer.isReady()) {
+      SpotifyPlayer.play();
+      window._musicPlaying = true;
+    } else {
+      window._pendingPlay = true;
+    }
   }
 }
 
@@ -4658,6 +4662,45 @@ function skipSpotify() {
 <script src="js/spotify.js"></script>
 <a href="https://bandmusicgames.party" style="position:fixed;top:84px;right:12px;z-index:9999;padding:7px 13px;background:linear-gradient(135deg,#a855f7,#ec4899);color:#fff;border-radius:18px;font-size:10px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-weight:800;letter-spacing:0.1em;text-decoration:none;box-shadow:0 4px 12px rgba(168,85,247,0.35);">← LOBBY</a>
 <button onclick="document.getElementById('feedback-overlay').classList.add('open')" style="position:fixed;top:120px;right:12px;z-index:9999;padding:7px 13px;background:rgba(255,107,53,0.15);color:#FF6B35;border:1px solid rgba(255,107,53,0.35);border-radius:18px;font-size:10px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-weight:800;letter-spacing:0.1em;cursor:pointer;">FEEDBACK</button>
+<div id="vol-controls" style="display:none;position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:9999;display:flex;align-items:center;gap:8px;background:rgba(13,5,32,0.75);border:1px solid rgba(255,255,255,0.1);border-radius:20px;padding:6px 14px;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);">
+  <button id="vol-down" style="background:none;border:none;color:rgba(255,255,255,0.55);font-size:16px;cursor:pointer;padding:2px 4px;line-height:1;">−</button>
+  <button id="mute-btn" style="background:none;border:none;color:#fff;font-size:16px;cursor:pointer;padding:2px 4px;line-height:1;">🔊</button>
+  <button id="vol-up" style="background:none;border:none;color:rgba(255,255,255,0.55);font-size:16px;cursor:pointer;padding:2px 4px;line-height:1;">+</button>
+</div>
+<script>
+(function(){
+  let _vol = 0.75, _muted = false;
+  const muteBtn = document.getElementById('mute-btn');
+  const volDown = document.getElementById('vol-down');
+  const volUp   = document.getElementById('vol-up');
+
+  function applyVol() {
+    const v = _muted ? 0 : _vol;
+    if (window.SpotifyPlayer) SpotifyPlayer.setVolume(v);
+    muteBtn.textContent = _muted ? '🔇' : '🔊';
+  }
+
+  muteBtn.addEventListener('click', () => { _muted = !_muted; applyVol(); });
+  volDown.addEventListener('click', () => {
+    _muted = false;
+    _vol = Math.max(0, _vol - 0.15);
+    applyVol();
+  });
+  volUp.addEventListener('click', () => {
+    _muted = false;
+    _vol = Math.min(1, _vol + 0.15);
+    applyVol();
+  });
+
+  // Show controls once Spotify is connected and playing
+  const showWhenReady = setInterval(() => {
+    if (window._spotifyConnected || window._musicPlaying) {
+      document.getElementById('vol-controls').style.display = 'flex';
+      clearInterval(showWhenReady);
+    }
+  }, 500);
+})();
+</script>
 
 <div id="feedback-overlay">
   <div id="feedback-box">
