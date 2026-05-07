@@ -222,7 +222,7 @@ const CHARS = {
     hairStyle: 'beanie', hue: '#FF6B35',
     quips: ['🥁 BOOM!', '🔥 BLOCKED!', '😤 MINE!', '💥 DENIED!'],
     ability: 'PAINT BEAST', abilityEmoji: '💪',
-    _3ptBonus: 0, _spd: 1.0, _stealBonus: 0
+    _3ptBonus: 0, _spd: 1.0, _stealBonus: 0, _paintBlock: true
   },
   james: {
     name: 'JAMES', role: 'KEYS',
@@ -231,7 +231,7 @@ const CHARS = {
     hairStyle: 'glasses', hue: '#9B59B6',
     quips: ['🎹 NICE!', '😎 EZ!', '💜 YES!', '🎯 PERFECT!'],
     ability: 'DEEP RANGE', abilityEmoji: '🔭',
-    _3ptBonus: 0, _spd: 0.95, _stealBonus: 0
+    _3ptBonus: 0.08, _spd: 0.95, _stealBonus: 0
   }
 };
 const TEAM_A_IDS = ['nara', 'ethan'];
@@ -1991,10 +1991,16 @@ function releaseShoot() {
   // Layup / dunk near basket — higher accuracy, override text
   if (dist < 70) {
     const isDunk = dist < 38 && power >= 40;
+    // Breakaway dunk: fast break, open lane, no defenders nearby
+    const breakawayOpen = S._fastBreak > 60 && TEAM_B_IDS.every(id => Math.hypot(S.players[id].x - ap.x, S.players[id].y - ap.y) > 100);
     // Poster dunk: dunk OVER a defender who's in the paint
     const defInPaint = TEAM_B_IDS.find(id => Math.abs(S.players[id].x - HOOP_X) < 50 && Math.hypot(S.players[id].x - ap.x, 0) < 48);
     const isPoster = isDunk && defInPaint && Math.abs(ap.vx) > 1.8 && Math.random() < 0.45;
-    if (isPoster) {
+    if (breakawayOpen && isDunk) {
+      acc = 1.0; timingText = '🚀 BREAKAWAY DUNK!';
+      S.shake = 14;
+      spawnCrowdBurst([CHARS.nara.hue, '#FFD700', '#00CFFF', '#FFF']);
+    } else if (isPoster) {
       acc = 0.99; timingText = '💥 POSTER DUNK!';
       spawnThought(defInPaint, '😱 POSTERIZED!');
       S.shake = 18;
@@ -2015,12 +2021,20 @@ function releaseShoot() {
   const closestDef = Math.min(...TEAM_B_IDS.map(id => Math.hypot(S.players[id].x - ap.x, S.players[id].y - ap.y)));
   const wideOpen = closestDef > 85;
   const contested = closestDef < 38;
+  // Brendan's PAINT BEAST: extra contest penalty in the paint
+  const brendanClose = Math.hypot(S.players.brendan.x - ap.x, S.players.brendan.y - ap.y) < 42;
+  const paintBeastPenalty = brendanClose && dist < SHOT_RANGE_2 && CHARS.brendan._paintBlock ? 0.06 : 0;
   if (wideOpen && dist > SHOT_RANGE_LAY) {
     acc = Math.min(acc + 0.06, 0.99);
     if (inGreen || isPerfect) spawnThought(ap.id, '🎯 WIDE OPEN!');
   } else if (contested) {
-    acc = Math.max(0.05, acc - 0.12);
-    if (dist > SHOT_RANGE_LAY) spawnThought(ap.id, '🙅 CONTESTED!');
+    acc = Math.max(0.05, acc - 0.12 - paintBeastPenalty);
+    if (dist > SHOT_RANGE_LAY) {
+      if (paintBeastPenalty > 0) spawnThought(ap.id, '💪 PAINT BEAST!');
+      else spawnThought(ap.id, '🙅 CONTESTED!');
+    }
+  } else if (paintBeastPenalty > 0) {
+    acc = Math.max(0.08, acc - paintBeastPenalty);
   }
 
   // Put-back bonus: shooting after offensive rebound
@@ -2832,8 +2846,13 @@ function updatePlayers() {
       const defFar = TEAM_B_IDS.every(id => Math.hypot(S.players[id].x - tm.x, S.players[id].y - tm.y) > 60);
       if (tmNearBasket && defFar) spawnThought(ap.id, '🙌 LOB IT!');
     }
+    // Breakaway indicator: fast break, carrier near paint, no defenders close
+    const breakawayAvail = S._fastBreak > 60 && ap.hasBall && Math.abs(ap.x - HOOP_X) < 100 &&
+      TEAM_B_IDS.every(id => Math.hypot(S.players[id].x - ap.x, S.players[id].y - ap.y) > 100);
+    if (breakawayAvail && S.frame % 120 === 0) spawnThought(ap.id, '🚀 GO DUNK!');
 
-    const spd = isDoubleTeamed ? 2.8 : S._fastBreak > 0 ? 4.4 : 3.5; // slowed in double team
+    const fastBreakBoost = S._fastBreak > 80 ? 0.8 : S._fastBreak > 30 ? 0.3 : 0;
+    const spd = isDoubleTeamed ? 2.8 : 3.5 + fastBreakBoost; // slowed in double team, boosted on fast break
 
     if (S.joy.active) {
       const jNorm = Math.hypot(S.joy.dx, S.joy.dy);
@@ -3022,13 +3041,17 @@ function updateAIDefense() {
   if (brendan._ankleStun > 0) { brendan._ankleStun--; return; }
   if (james._ankleStun > 0) { james._ankleStun--; return; }
 
-  // Pressure defense: CPU gets tighter when human is near game point
+  // Pressure defense: CPU gets tighter when human is near game point or on hot streak
   const humanNearWin = S._deuceActive && S.score[0] > S.score[1];
-  const pressMult = humanNearWin ? 1.2 : 1.0;
+  const humanHot = S.streak >= 3;
+  const pressMult = humanNearWin ? 1.25 : humanHot ? 1.1 : 1.0;
+
+  // When human is on Chef Curry mode, Brendan overplays the 3pt line
+  const brendanOverplays3 = (S._human3ptStreak || 0) >= 3;
 
   // Brendan pressures the carrier — stays close, between carrier and basket
   // Tighten perimeter if human is shooting a lot of 3s
-  const backoffB = (S._human3ptStreak >= 2) ? 16 : (humanNearWin ? 14 : 28);
+  const backoffB = brendanOverplays3 ? 5 : (S._human3ptStreak >= 2) ? 16 : (humanNearWin ? 14 : 28);
   const targetBX = Math.max(carrier.x + backoffB, HOOP_X - 35);
   const bDx = targetBX - brendan.x;
   const bDy = (carrier.y - 8) - brendan.y;
@@ -3253,7 +3276,8 @@ function aiShoot(p) {
   // Rubber-band: CPU gets boost when trailing by 4+ (desperation mode)
   const deficit = S.score[0] - S.score[1];
   const rubberMult = deficit >= 4 ? (1 + deficit * 0.04) : 1.0;
-  const acc  = (dist < SHOT_RANGE_LAY ? 0.75 : dist < SHOT_RANGE_2 ? 0.55 : 0.35) * diffMult * mercyMult * rubberMult;
+  const charBonus3 = (dist > SHOT_RANGE_2 && CHARS[p.id]._3ptBonus) ? CHARS[p.id]._3ptBonus : 0;
+  const acc  = (dist < SHOT_RANGE_LAY ? 0.75 : dist < SHOT_RANGE_2 ? 0.55 : 0.35 + charBonus3) * diffMult * mercyMult * rubberMult;
   const made = Math.random() < Math.min(0.96, acc);
 
   p.anim = 'shoot';
