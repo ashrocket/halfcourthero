@@ -1029,8 +1029,10 @@ function drawShotTrajectory() {
   const vy0 = (dy - 0.225 * tFly * tFly) / tFly;
 
   const isChefCurry3 = (S._human3ptStreak || 0) >= 3 && dist > SHOT_RANGE_2;
-  const greenLo3 = isChefCurry3 ? POWER_GREEN_LO - 8 : POWER_GREEN_LO;
-  const greenHi3 = isChefCurry3 ? POWER_GREEN_HI + 8 : POWER_GREEN_HI;
+  const _diffLo3 = S._difficulty === 'easy' ? POWER_GREEN_LO - 14 : S._difficulty === 'hard' ? POWER_GREEN_LO + 5 : POWER_GREEN_LO;
+  const _diffHi3 = S._difficulty === 'easy' ? POWER_GREEN_HI + 14 : S._difficulty === 'hard' ? POWER_GREEN_HI - 5 : POWER_GREEN_HI;
+  const greenLo3 = isChefCurry3 ? _diffLo3 - 8 : _diffLo3;
+  const greenHi3 = isChefCurry3 ? _diffHi3 + 8 : _diffHi3;
   const inGreen = power >= greenLo3 && power <= greenHi3;
   const isPerfect = power >= 60 && power <= 68;
 
@@ -1107,8 +1109,10 @@ function drawPowerIndicator() {
   const power = S.shootPower;
   if (power < 1) return;
   const isChefCurry2 = (S._human3ptStreak || 0) >= 3;
-  const greenLo2 = isChefCurry2 ? POWER_GREEN_LO - 8 : POWER_GREEN_LO;
-  const greenHi2 = isChefCurry2 ? POWER_GREEN_HI + 8 : POWER_GREEN_HI;
+  const _diffLo2 = S._difficulty === 'easy' ? POWER_GREEN_LO - 14 : S._difficulty === 'hard' ? POWER_GREEN_LO + 5 : POWER_GREEN_LO;
+  const _diffHi2 = S._difficulty === 'easy' ? POWER_GREEN_HI + 14 : S._difficulty === 'hard' ? POWER_GREEN_HI - 5 : POWER_GREEN_HI;
+  const greenLo2 = isChefCurry2 ? _diffLo2 - 8 : _diffLo2;
+  const greenHi2 = isChefCurry2 ? _diffHi2 + 8 : _diffHi2;
   const inGreen = power >= greenLo2 && power <= greenHi2;
   const alpha = 0.35 + (power / 100) * 0.5;
   const color = isChefCurry2 && inGreen ? `rgba(255,200,0,${alpha})` : inGreen ? `rgba(0,255,136,${alpha})` : `rgba(255,200,0,${alpha})`;
@@ -1738,7 +1742,9 @@ function drawControls() {
   // Main action button (SHOOT / BLOCK) — hold to charge
   const actionLabel = isAttacking ? 'SHOOT' : 'BLOCK';
   const actionColor = isAttacking ? CHARS.nara.hue : '#00BFFF';
-  const inGreen = isAttacking && power >= POWER_GREEN_LO && power <= POWER_GREEN_HI;
+  const _hudDiffLo = S._difficulty === 'easy' ? POWER_GREEN_LO - 14 : S._difficulty === 'hard' ? POWER_GREEN_LO + 5 : POWER_GREEN_LO;
+  const _hudDiffHi = S._difficulty === 'easy' ? POWER_GREEN_HI + 14 : S._difficulty === 'hard' ? POWER_GREEN_HI - 5 : POWER_GREEN_HI;
+  const inGreen = isAttacking && power >= _hudDiffLo && power <= _hudDiffHi;
   const btnAlpha = isHeld ? 0.6 : 0.35;
 
   circle(300, 640, 42, `rgba(0,0,0,${btnAlpha})`, actionColor, 2.5);
@@ -1753,8 +1759,8 @@ function drawControls() {
 
     // Green target band (the radii where the sweet spot lives)
     if (isAttacking) {
-      const rLo = maxR - (maxR - btnR) * (POWER_GREEN_LO / 100);
-      const rHi = maxR - (maxR - btnR) * (POWER_GREEN_HI / 100);
+      const rLo = maxR - (maxR - btnR) * (_hudDiffLo / 100);
+      const rHi = maxR - (maxR - btnR) * (_hudDiffHi / 100);
       ctx.beginPath();
       ctx.arc(300, 640, (rLo + rHi) / 2, 0, Math.PI * 2);
       ctx.strokeStyle = 'rgba(0,255,136,0.35)';
@@ -2526,15 +2532,23 @@ function releaseShoot() {
 
   // Chef Curry mode: wider green zone when on 3pt hot streak
   const isChefCurry = (S._human3ptStreak || 0) >= 3 && dist > SHOT_RANGE_2;
-  const greenLo = isChefCurry ? POWER_GREEN_LO - 8 : POWER_GREEN_LO;
-  const greenHi = isChefCurry ? POWER_GREEN_HI + 8 : POWER_GREEN_HI;
+  const _dLo = S._difficulty === 'easy' ? POWER_GREEN_LO - 14 : S._difficulty === 'hard' ? POWER_GREEN_LO + 5 : POWER_GREEN_LO;
+  const _dHi = S._difficulty === 'easy' ? POWER_GREEN_HI + 14 : S._difficulty === 'hard' ? POWER_GREEN_HI - 5 : POWER_GREEN_HI;
+  const greenLo = isChefCurry ? _dLo - 8 : _dLo;
+  const greenHi = isChefCurry ? _dHi + 8 : _dHi;
   const inGreen = power >= greenLo && power <= greenHi;
   const isPerfect = power >= 60 && power <= 68;
 
   let acc, timingText;
-  if (S.easyMode) {
-    if (isPerfect || inGreen) { acc = 1.0; timingText = '🎯 PERFECT!'; }
-    else { acc = 0.0; timingText = power < greenLo ? '⬆ EARLY' : '⬇ LATE'; }
+  if (S._difficulty === 'easy') {
+    if (isPerfect || inGreen) { acc = 1.0;  timingText = '🎯 PERFECT!'; }
+    else if (power >= greenLo - 10 && power <= greenHi + 10) { acc = 0.72; timingText = '💚 GOOD!'; }
+    else                      { acc = 0.50; timingText = power < greenLo ? '⬆ EARLY' : '⬇ LATE'; }
+  } else if (S._difficulty === 'hard') {
+    if (isPerfect)        { acc = 0.92; timingText = isChefCurry ? '🍳 PERFECT!' : '🎯 PERFECT!'; }
+    else if (inGreen)     { acc = 0.78; timingText = isChefCurry ? '🍳 COOKING!' : '💚 GOOD!'; }
+    else if (power < greenLo) { acc = 0.06 + power * 0.003; timingText = '⬆ EARLY'; }
+    else                  { acc = 0.18; timingText = '⬇ LATE'; }
   } else {
     if (isPerfect)        { acc = 0.95; timingText = isChefCurry ? '🍳 PERFECT!' : '🎯 PERFECT!'; }
     else if (inGreen)     { acc = 0.88; timingText = isChefCurry ? '🍳 COOKING!' : '💚 GOOD!'; }
