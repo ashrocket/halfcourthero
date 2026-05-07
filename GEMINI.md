@@ -9,14 +9,14 @@ The game is a direct tie-in to the "Nara's Room - Lizzie McGuire" official music
 - **Nara (Vocals/Guitar):** Matches her cartoon avatar in the video with the signature black bob, black t-shirt, and blue shorts.
 - **Ethan (Bass):** Features his iconic lime green, black, and white patterned jersey and sunglasses.
 - **Brendan (Drums):** Wears a white "WMPG 90.9" graphic tee over orange long sleeves, complete with a grey beanie.
-- **James (Keys):** Identified by his striped brown/grey shirt over grey sleeves, beanie, and glasses.
+- **Will (Keys):** Identified by his striped brown/grey shirt over grey sleeves, beanie, and glasses.
 
 ## Findings
 - **Technology Stack:** Vanilla HTML5 Canvas API, JavaScript (ES6+), and CSS. Zero external dependencies.
 - **Game Mechanics:** 
   - **Shooting:** Uses a timing-based "shot ring" mechanic for accuracy.
   - **Defense:** Includes both blocking and stealing mechanics.
-  - **NPC Behavior:** Team B (Brendan & James) is controlled by a state-based system that drives to the hoop and shoots.
+  - **NPC Behavior:** Team B (Brendan & Will) is controlled by a state-based system that drives to the hoop and shoots.
   - **Controls:** Multi-modal support (Touch, Keyboard `Arrow/WASD + Z/X`, and Mouse).
 - **Architecture:** 
   - Centralized state management via a global object `S`.
@@ -39,6 +39,6 @@ The game is a direct tie-in to the "Nara's Room - Lizzie McGuire" official music
 
 ## Repository Structure
 - `index.html`: The core game logic and UI.
-- `assets/`: Contains character sprites (`nara`, `ethan`, `brendan`, `james`) and the court environment.
+- `assets/`: Contains character sprites (`nara`, `ethan`, `brendan`, `will`) and the court environment.
 - `screenshots/`: Promotional and gameplay captures of various game states.
 - `.wrangler/`: Configuration for Cloudflare Pages deployment.
