@@ -1038,8 +1038,10 @@ function spawnThought(id, text) {
   const isGood = /PERFECT|GOOD|DUNK|LAYUP|ALLEY|FIRE|CLUTCH|SWISH|YES|LFG|NICE|MONEY|ONE/.test(text);
   const isBad  = /MISS|EARLY|LATE|AIR BALL|TOO FAR/.test(text);
   const bg = isGood ? '#E8FFE8EE' : isBad ? '#FFE8E8EE' : '#FFFFFAEE';
+  const lane = S.thoughts.length % 3;
   S.thoughts.push({
-    x: p.x, y: 52,
+    x: Math.max(70, Math.min(GW - 70, p.x)),
+    y: 112 + lane * 34,
     text, ttl: 90, maxTtl: 90,
     dx: (Math.random() - 0.5) * 0.5,
     bg,
@@ -1050,20 +1052,23 @@ function drawThoughts() {
   for (const th of S.thoughts) {
     const alpha = Math.min(1, th.ttl / 20);
     const sc    = 1 + (1 - th.ttl / th.maxTtl) * 0.18;
+    const fontSize = th.text.length > 16 ? 11 : 13;
+    ctx.font = `bold ${fontSize}px sans-serif`;
+    const tw = Math.min(GW - 24, ctx.measureText(th.text).width + 20);
+    const th2 = 30;
+    const bx = Math.max(12 + tw / 2, Math.min(GW - 12 - tw / 2, th.x));
     ctx.save();
     ctx.globalAlpha = alpha;
-    ctx.translate(th.x, th.y);
+    ctx.translate(bx, th.y);
     ctx.scale(sc, sc);
 
-    const tw = ctx.measureText(th.text).width + 18;
-    const th2 = 28;
     fillRR(-tw / 2, -th2 / 2, tw, th2, 12, th.bg || '#FFFFFAEE', '#000', 2);
     ctx.beginPath();
     ctx.moveTo(-5, th2 / 2); ctx.lineTo(5, th2 / 2); ctx.lineTo(0, th2 / 2 + 10);
-    ctx.closePath(); ctx.fillStyle = '#FFFFFAEE'; ctx.fill();
+    ctx.closePath(); ctx.fillStyle = th.bg || '#FFFFFAEE'; ctx.fill();
     ctx.strokeStyle = '#000'; ctx.lineWidth = 1.5; ctx.stroke();
 
-    ctx.fillStyle = '#111'; ctx.font = 'bold 13px sans-serif';
+    ctx.fillStyle = '#111'; ctx.font = `bold ${fontSize}px sans-serif`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(th.text, 0, 0);
     ctx.restore();
@@ -3309,6 +3314,41 @@ function turnoverToCPU() {
   S.players[TEAM_B_IDS[1]]._postUp = false;
 }
 
+function resolvePaintCrowding() {
+  const ids = TEAM_A_IDS.concat(TEAM_B_IDS);
+  const minDist = 30;
+  for (let i = 0; i < ids.length; i++) {
+    for (let j = i + 1; j < ids.length; j++) {
+      const a = S.players[ids[i]];
+      const b = S.players[ids[j]];
+      if (!a || !b) continue;
+      const inPaintTraffic = a.x > HOOP_X - 125 || b.x > HOOP_X - 125;
+      if (!inPaintTraffic) continue;
+      const dx = b.x - a.x;
+      const dy = (b.y - a.y) * 1.45;
+      const dist = Math.hypot(dx, dy) || 0.01;
+      if (dist >= minDist) continue;
+
+      const overlap = (minDist - dist) * 0.18;
+      const nx = dx / dist;
+      const ny = dy / dist / 1.45;
+      const aWeight = a.hasBall ? 0.25 : 0.55;
+      const bWeight = b.hasBall ? 0.25 : 0.55;
+      a.x -= nx * overlap * aWeight;
+      b.x += nx * overlap * bWeight;
+      a.y -= ny * overlap * aWeight;
+      b.y += ny * overlap * bWeight;
+      a.vx *= 0.65; a.vy *= 0.65;
+      b.vx *= 0.65; b.vy *= 0.65;
+    }
+  }
+  for (const id of ids) {
+    const p = S.players[id];
+    p.x = Math.max(20, Math.min(350, p.x));
+    p.y = Math.max(COURT_FAR_Y, Math.min(COURT_NEAR_Y, p.y));
+  }
+}
+
 // ── Player Movement Update ────────────────────────────────────────
 function updatePlayers() {
   // Update cooldowns
@@ -3535,6 +3575,7 @@ function updatePlayers() {
     const ap = S.players[S.activeHuman];
     if (!S.joy.active) ap.facing = 1;
   }
+  resolvePaintCrowding();
 }
 
 // ── NPC Logic ──────────────────────────────────────────────────────
@@ -3641,8 +3682,8 @@ function updateCPUDefense() {
 
   // Will plays back — protects the paint and slides toward carrier when they drive inside
   const driveDepth = carrier.x > HOOP_X - 130; // carrier has driven into the lane
-  const targetJX = driveDepth ? Math.min(carrier.x + 30, HOOP_X - 25) : HOOP_X - 60;
-  const targetJY = driveDepth ? carrier.y : (COURT_FAR_Y + COURT_NEAR_Y) / 2;
+  const targetJX = driveDepth ? Math.max(HOOP_X - 98, Math.min(carrier.x + 6, HOOP_X - 68)) : HOOP_X - 60;
+  const targetJY = driveDepth ? carrier.y + 12 : (COURT_FAR_Y + COURT_NEAR_Y) / 2;
   const jDx = targetJX - will.x;
   const jDy = targetJY - will.y;
   if (Math.abs(jDx) > 8) {
@@ -3907,7 +3948,8 @@ function fireBallShot(fromX, fromY, made, dist, isFloater) {
 // ── Shoot Power Update ────────────────────────────────────────────
 function updateShootPower() {
   if (S.possession === 'a' && S.shootHeld) {
-    S.shootPower = Math.min(100, S.shootPower + 1.5);
+    const chargeRate = S._difficulty === 'easy' ? 1.05 : 1.5;
+    S.shootPower = Math.min(100, S.shootPower + chargeRate);
     if (S.shootPower >= 100) releaseShoot();
   } else if (S.possession === 'b' && S.blockHeld) {
     S.blockPower = Math.min(100, S.blockPower + 2.5);
@@ -3920,7 +3962,7 @@ function updateThoughts() {
   for (let i = S.thoughts.length - 1; i >= 0; i--) {
     S.thoughts[i].ttl--;
     S.thoughts[i].x += S.thoughts[i].dx;
-    S.thoughts[i].y = Math.max(30, S.thoughts[i].y - 0.15);
+    S.thoughts[i].y = Math.max(96, S.thoughts[i].y - 0.05);
     if (S.thoughts[i].ttl <= 0) S.thoughts.splice(i, 1);
   }
 }
@@ -4382,6 +4424,6 @@ function loop() {
 initState();
 loop();
 </script>
-<a href="https://bandmusicgames.party" style="position:fixed;bottom:16px;right:16px;z-index:9999;padding:8px 16px;background:linear-gradient(135deg,#a855f7,#ec4899);color:#fff;border-radius:20px;font-size:11px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-weight:700;letter-spacing:0.1em;text-decoration:none;box-shadow:0 4px 12px rgba(168,85,247,0.4);">← LOBBY</a>
+<a href="https://bandmusicgames.party" style="position:fixed;top:84px;right:12px;z-index:9999;padding:7px 13px;background:linear-gradient(135deg,#a855f7,#ec4899);color:#fff;border-radius:18px;font-size:10px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-weight:800;letter-spacing:0.1em;text-decoration:none;box-shadow:0 4px 12px rgba(168,85,247,0.35);">← LOBBY</a>
 </body>
 </html>

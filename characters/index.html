@@ -13,8 +13,34 @@
   .title-top { font-size: clamp(10px, 2vw, 14px); letter-spacing: 0.35em; color: #FFD700; }
   .title-main { font-size: clamp(18px, 4vw, 28px); font-weight: 900; letter-spacing: 0.15em; color: #ffffff; margin-top: 4px; }
   .hint { display: none; }
-  .back-btn { position: absolute; top: 36px; left: 28px; font-size: 13px; letter-spacing: 0.2em; color: #ffffff50; text-decoration: none; transition: color 0.15s; }
-  .back-btn:hover { color: #fff; }
+  .back-btn {
+    position: absolute;
+    top: 24px;
+    left: 24px;
+    z-index: 3;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 118px;
+    height: 42px;
+    padding: 0 18px;
+    border: 2px solid #FFD700;
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.72);
+    box-shadow: 0 0 18px rgba(255, 215, 0, 0.24);
+    color: #FFD700;
+    font-size: 14px;
+    font-weight: 900;
+    letter-spacing: 0.12em;
+    text-decoration: none;
+    transition: background 0.15s, box-shadow 0.15s, transform 0.15s;
+  }
+  .back-btn:hover {
+    background: #FFD700;
+    box-shadow: 0 0 22px rgba(255, 215, 0, 0.42);
+    color: #12001d;
+    transform: translateY(-1px);
+  }
 </style>
 </head>
 <body>
@@ -24,7 +50,7 @@
     <div class="title-main">THE BAND</div>
   </div>
   <canvas id="cv"></canvas>
-  <a class="back-btn" href="/">← GAME</a>
+  <a class="back-btn" href="/">← PLAY!</a>
   <div class="hint"></div>
 </div>
 
