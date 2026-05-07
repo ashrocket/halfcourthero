@@ -224,7 +224,7 @@ const POWER_GREEN_HI = 76;
 // ── Character Definitions ───────────────────────────────────────
 const CHARS = {
   nara: {
-    name: 'NARA', role: 'VOCALS · GUITAR',
+    name: 'NARA', fullName: 'NARA AVAKIAN', role: 'VOCALS · GUITAR',
     skin: '#FDBCB4', hair: '#1C0A00', shirt: '#222222',
     pants: '#3366DD', shoes: '#2A2A2A', brow: '#3D0000',
     hairStyle: 'bob', hue: '#FF1493',
@@ -234,7 +234,7 @@ const CHARS = {
     _3ptBonus: 0.10, _spd: 1.0, _stealBonus: 0
   },
   ethan: {
-    name: 'ETHAN', role: 'BASS',
+    name: 'ETHAN', fullName: 'ETHAN NASH', role: 'BASS',
     skin: '#C68642', hair: '#3D2B1F', shirt: '#32CD32',
     pants: '#1C1C2E', shoes: '#FFFFFF', brow: '#3D2B1F',
     hairStyle: 'long', hue: '#32CD32',
@@ -244,7 +244,7 @@ const CHARS = {
     _3ptBonus: 0, _spd: 1.05, _stealBonus: 0.20, _h: 185
   },
   brendan: {
-    name: 'BRENDAN', role: 'DRUMS',
+    name: 'BRENDAN', fullName: 'BRENDAN JONES', role: 'DRUMS',
     skin: '#FDBCB4', hair: '#CC2200', shirt: '#FF6B35',
     pants: '#2D5A27', shoes: '#222', brow: '#CC2200',
     hairStyle: 'beanie', hue: '#FF6B35',
@@ -253,7 +253,7 @@ const CHARS = {
     _3ptBonus: 0, _spd: 1.0, _stealBonus: 0, _paintBlock: true
   },
   will: {
-    name: 'WILL', role: 'KEYS',
+    name: 'WILL', fullName: 'WILL FISHER', role: 'KEYS',
     skin: '#8D5524', hair: '#111', shirt: '#9B59B6',
     pants: '#2C2C2C', shoes: '#9B59B6', brow: '#111',
     hairStyle: 'glasses', hue: '#9B59B6',
@@ -1806,7 +1806,7 @@ function drawCharSelect() {
   } else {
     ctx.fillStyle = CHARS[chosen].hue;
     ctx.font = 'bold 14px monospace'; ctx.letterSpacing = '0.1em';
-    ctx.fillText(CHARS[chosen].name + '  ✓', 0, -13);
+    ctx.fillText((CHARS[chosen].fullName || CHARS[chosen].name) + '  ✓', 0, -13, GW - 40);
     ctx.fillStyle = '#FFD700';
     ctx.font = 'bold 16px monospace'; ctx.letterSpacing = '0.12em';
     ctx.fillText('PICK TEAMMATE', 0, 8);

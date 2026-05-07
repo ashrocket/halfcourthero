@@ -31,25 +31,25 @@
 <script>
 const CHARS = [
   {
-    id: 'nara', name: 'NARA', role: 'VOCALS · GUITAR',
+    id: 'nara', name: 'NARA', fullName: 'NARA AVAKIAN', role: 'VOCALS · GUITAR',
     ability: '3PT SHOOTER · SPEED BOOST',
     summary: 'Deep shot confidence with wing-assisted lift.',
     hue: '#FF1493', sprite: '../assets/nara_sprite.png', face: [120, 0, 340, 350],
   },
   {
-    id: 'ethan', name: 'ETHAN', role: 'BASS',
+    id: 'ethan', name: 'ETHAN', fullName: 'ETHAN NASH', role: 'BASS',
     ability: 'LOCKDOWN · +20% STEAL RANGE',
     summary: 'Stretch arms for blocks, boards, and poke steals.',
     hue: '#32CD32', sprite: '../assets/ethan_sprite.png', face: [55, 0, 265, 360],
   },
   {
-    id: 'brendan', name: 'BRENDAN', role: 'DRUMS',
+    id: 'brendan', name: 'BRENDAN', fullName: 'BRENDAN JONES', role: 'DRUMS',
     ability: 'PAINT BEAST · IN THE PAINT',
     summary: 'Controls rebounds and contests everything near the rim.',
     hue: '#FF6B35', sprite: '../assets/brendan_sprite.png', face: [28, 0, 264, 370],
   },
   {
-    id: 'will', name: 'WILL', role: 'KEYS',
+    id: 'will', name: 'WILL', fullName: 'WILL FISHER', role: 'KEYS',
     ability: 'DEEP RANGE · +8% THREE POINT',
     summary: 'Long-range touch with a bucket-hat headbutt finish.',
     hue: '#9B59B6', sprite: '../assets/will_sprite.png', face: [40, 0, 350, 345],
@@ -249,14 +249,16 @@ function drawFace(c) {
 
 function drawName(c, y, selectedStyle = true) {
   const dpr = window.devicePixelRatio || 1;
+  const nameText = c.fullName || c.name;
+  const nameSize = Math.min(34 * dpr, (W * 0.82) / (nameText.length * 0.62));
   ctx.save();
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.font = `900 ${34 * dpr}px Courier New, monospace`;
+  ctx.font = `900 ${nameSize}px Courier New, monospace`;
   ctx.shadowColor = 'rgba(0,0,0,0.75)';
   ctx.shadowBlur = 8 * dpr;
   ctx.fillStyle = selectedStyle ? c.hue : '#ffffff75';
-  ctx.fillText(c.name, W / 2, y);
+  ctx.fillText(nameText, W / 2, y, W * 0.86);
   ctx.shadowBlur = 0;
   ctx.font = `900 ${15 * dpr}px Courier New, monospace`;
   ctx.fillStyle = '#ffffffB8';
