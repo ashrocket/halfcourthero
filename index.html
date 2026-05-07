@@ -174,18 +174,20 @@ function sfxVictoryFanfare() {
   });
 }
 
+// True touch/mobile device (not a desktop with a wide window)
+const _isMobile = window.matchMedia('(pointer: coarse)').matches;
+
 function fitCanvas() {
   const lw = window.innerWidth, lh = window.innerHeight;
-  const isLandscape = lw > lh;
+  // Only rotate for landscape on actual touch/mobile devices, not desktop browsers
+  const isLandscape = lw > lh && _isMobile;
   if (isLandscape) {
     _rotated = true;
     // Scale so portrait canvas (GW×GH) fits rotated in landscape (lw×lh)
-    // After 90° CW rotation: portrait width→visual height, portrait height→visual width
     _scale = Math.min(lh / GW, lw / GH);
     const cw = GW * _scale, ch = GH * _scale;
     canvas.style.width  = cw + 'px';
     canvas.style.height = ch + 'px';
-    // Center canvas; after rotation its visual center stays at screen center
     canvas.style.left   = (lw / 2 - cw / 2) + 'px';
     canvas.style.top    = (lh / 2 - ch / 2) + 'px';
     canvas.style.transformOrigin = '50% 50%';
@@ -531,13 +533,13 @@ function drawChar(id, hasBall) {
     scX = 1 + Math.sin(phase) * 0.012;
     scY = 1 - Math.sin(phase) * 0.012;
   } else if (anim === 'run') {
-    const phase = f * 0.28;
-    const intensity = p.ai ? 1 : Math.min(1, Math.hypot(p.vx, p.vy) / 3.5);
-    bobY = -Math.abs(Math.sin(phase)) * 8 * intensity;
-    lean = Math.sin(phase) * 0.13 * intensity;
-    const sq = Math.cos(phase * 2);
-    scX = 1 + sq * 0.07 * intensity;
-    scY = 1 - sq * 0.05 * intensity;
+    const phase = f * 0.20;
+    const intensity = p.ai ? 0.75 : Math.min(1, Math.hypot(p.vx, p.vy) / 3.5);
+    bobY = -Math.abs(Math.sin(phase)) * 5 * intensity;
+    lean = Math.sin(phase) * 0.06 * intensity;
+    const sq = Math.cos(phase);
+    scX = 1 + sq * 0.03 * intensity;
+    scY = 1 - sq * 0.02 * intensity;
   } else if (anim === 'jump') {
     scX = 0.87; scY = 1.16;
   } else if (anim === 'land') {
