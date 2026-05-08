@@ -120,9 +120,9 @@ canvas {
 <body>
 <div id="spotify-overlay">
   <h1>🏀 HALF COURT HERO</h1>
-  <p>Connect Spotify to play <strong style="color:#FF6B35">Lizzy McGuire</strong><br>by Nara's Room while you ball.<br>Requires Spotify Premium.</p>
-  <button class="btn-lobby" onclick="window.location.href='https://bandmusicgames.party'">▶ CONNECT SPOTIFY AT LOBBY</button>
-  <button class="btn-skip" onclick="skipSpotify()">play without music</button>
+  <p>For the full experience, play <strong style="color:#FF6B35">Lizzy McGuire</strong><br>by Nara's Room on Spotify.<br><br>Open it in Spotify — then come back here!</p>
+  <button class="btn-lobby" onclick="openSpotifyTrack()">▶ Open in Spotify ↗</button>
+  <button class="btn-skip" onclick="skipSpotify()">already playing / skip</button>
 </div>
 <canvas id="g"></canvas>
 <script>
@@ -5091,6 +5091,12 @@ loop();
 function skipSpotify() {
   document.getElementById('spotify-overlay').classList.add('hidden');
   window._gameReady = true;
+}
+function openSpotifyTrack() {
+  const uri = 'spotify:track:7kNqAfUxLmrETcwvBTQCkg';
+  const web = 'https://open.spotify.com/track/7kNqAfUxLmrETcwvBTQCkg';
+  window.location.href = uri;
+  setTimeout(() => window.open(web, '_blank'), 800);
 }
 </script>
 <script>window.onSpotifyWebPlaybackSDKReady=function(){window._sdkReady=true;if(window._onSDKReady)window._onSDKReady();}</script>
