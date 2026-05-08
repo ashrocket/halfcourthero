@@ -1871,11 +1871,11 @@ function drawTitle() {
   }
 
   ctx.fillStyle = 'rgba(220, 140, 50, 0.15)';
-  ctx.fillRect(0, 515, GW, 235);
+  ctx.fillRect(0, 482, GW, 268);
 
   ctx.save();
   const tsc = 1 + Math.sin(S.frame * 0.04) * 0.02;
-  ctx.translate(GW / 2, 290);
+  ctx.translate(GW / 2, 255);
   ctx.scale(tsc, tsc);
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
 
@@ -1902,7 +1902,7 @@ function drawTitle() {
     const extras = [];
     if (titleBest.deuceWins > 0) extras.push(`⚖️×${titleBest.deuceWins}`);
     if (titleBest.comebacks > 0) extras.push(`💪×${titleBest.comebacks}`);
-    ctx.fillText('🏆 RECORD: ' + wl + (extras.length ? '   ' + extras.join(' ') : ''), GW / 2, 510);
+    ctx.fillText('🏆 RECORD: ' + wl + (extras.length ? '   ' + extras.join(' ') : ''), GW / 2, 465);
   }
 
   // Difficulty buttons on landing page
@@ -1910,15 +1910,15 @@ function drawTitle() {
   const diffBtns = [['easy','EASY','#32CD32'],['normal','NORMAL','#FFD700'],['hard','HARD','#FF4444']];
   ctx.fillStyle = 'rgba(255,255,255,0.28)'; ctx.font = 'bold 9px monospace';
   ctx.textAlign = 'center'; ctx.letterSpacing = '0.12em';
-  ctx.fillText('DIFFICULTY', GW / 2, 522);
+  ctx.fillText('DIFFICULTY', GW / 2, 490);
   let dbx = GW / 2 - 126;
   for (const [key, label, color] of diffBtns) {
     const sel = diff === key;
-    fillRR(dbx, 531, 76, 32, 9, sel ? color : 'rgba(0,0,0,0.4)', sel ? '#FFF' : color, sel ? 2.5 : 2);
+    fillRR(dbx, 499, 76, 32, 9, sel ? color : 'rgba(0,0,0,0.4)', sel ? '#FFF' : color, sel ? 2.5 : 2);
     ctx.fillStyle = sel ? '#111' : color;
     ctx.font = (sel ? 'bold ' : '') + '12px monospace';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.letterSpacing = '0';
-    ctx.fillText(label, dbx + 38, 547);
+    ctx.fillText(label, dbx + 38, 515);
     dbx += 88;
   }
 
@@ -1941,20 +1941,20 @@ function drawTitle() {
   ctx.fillStyle = `rgba(255,255,255,${tapAlpha})`;
   ctx.font = 'bold 20px monospace'; ctx.textAlign = 'center';
   ctx.letterSpacing = '0.18em';
-  ctx.fillText('TAP TO PLAY', GW / 2, 575);
+  ctx.fillText('TAP TO PLAY', GW / 2, 548);
 
   // VS FRIEND button
   const vsPulse = 0.85 + Math.sin(S.frame * 0.05 + 1.2) * 0.15;
-  fillRR(GW / 2 - 74, 600, 148, 30, 10, `rgba(168,85,247,${vsPulse * 0.18})`, `rgba(168,85,247,${vsPulse * 0.7})`, 1.5);
+  fillRR(GW / 2 - 74, 570, 148, 30, 10, `rgba(168,85,247,${vsPulse * 0.18})`, `rgba(168,85,247,${vsPulse * 0.7})`, 1.5);
   ctx.fillStyle = `rgba(200,140,255,${vsPulse * 0.9})`;
   ctx.font = 'bold 11px monospace'; ctx.textAlign = 'center'; ctx.letterSpacing = '0.14em';
   ctx.textBaseline = 'middle';
-  ctx.fillText('⚔ INVITE FRIEND', GW / 2, 615);
+  ctx.fillText('⚔ INVITE FRIEND', GW / 2, 585);
   ctx.textBaseline = 'alphabetic';
 
   ctx.fillStyle = 'rgba(255,255,255,0.3)';
   ctx.font = 'bold 11px monospace'; ctx.letterSpacing = '0.12em';
-  ctx.fillText('BANDMUSICGAMES.PARTY', GW / 2, GH - 20);
+  ctx.fillText('BANDMUSICGAMES.PARTY', GW / 2, 660);
 }
 
 function drawCharSelect() {
@@ -2538,13 +2538,13 @@ canvas.addEventListener('touchstart', e => {
 
     if (S.screen === 'title') {
       // Difficulty buttons
-      if (y >= 527 && y <= 567) {
+      if (y >= 495 && y <= 535) {
         if (x >= 70  && x < 156) { S._difficulty = 'easy';   continue; }
         if (x >= 156 && x < 244) { S._difficulty = 'normal'; continue; }
         if (x >= 244 && x < 330) { S._difficulty = 'hard';   continue; }
       }
       // VS FRIEND button
-      if (y >= 596 && y <= 634 && Math.abs(x - GW / 2) <= 80) {
+      if (y >= 566 && y <= 604 && Math.abs(x - GW / 2) <= 80) {
         window.location.href = '/characters/?from=pvp';
         return;
       }
