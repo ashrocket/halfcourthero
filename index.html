@@ -4002,7 +4002,10 @@ function updatePlayers() {
       tp.facing = tdx > 0 ? 1 : -1;
     } else {
       // Weak-side positioning: teammate stays on opposite side from ball handler
-      const apZone = ap.x < 185 ? 'left' : 'right';
+      // Hysteresis: only switch zone when ap.x clearly crosses the boundary (30px dead band)
+      const prevApZone = tp._apZone || 'left';
+      const apZone = ap.x < (prevApZone === 'left' ? 200 : 170) ? 'left' : 'right';
+      tp._apZone = apZone;
       if (S._fastBreak > 0) {
         // Fast break — sprint straight to basket
         targetX = HOOP_X - 38;
@@ -4027,7 +4030,7 @@ function updatePlayers() {
       } else {
         tp.facing = 1; // always look toward hoop
       }
-      { const pvx = tp.x - prevTPX, pvy = tp.y - prevTPY; tp.anim = Math.hypot(pvx, pvy) > 0.3 ? 'run' : 'idle'; }
+      { const pvx = tp.x - prevTPX, pvy = tp.y - prevTPY; tp._animSpd = (tp._animSpd || 0) * 0.6 + Math.hypot(pvx, pvy) * 0.4; tp.anim = tp._animSpd > 0.5 ? 'run' : 'idle'; }
     }
     tp.x = Math.max(20, Math.min(320, tp.x));
     tp.y = Math.max(COURT_FAR_Y, Math.min(COURT_NEAR_Y, tp.y));
@@ -4071,7 +4074,8 @@ function updatePlayers() {
             if (Math.abs(gtdx) > 4) gtp.facing = gtdx > 0 ? 1 : -1;
           }
           gtp.vx = gtp.x - prevGTPX; gtp.vy = gtp.y - prevGTPY;
-          gtp.anim = Math.hypot(gtp.vx, gtp.vy) > 0.3 ? 'run' : 'idle';
+          gtp._animSpd = (gtp._animSpd || 0) * 0.6 + Math.hypot(gtp.vx, gtp.vy) * 0.4;
+          gtp.anim = gtp._animSpd > 0.5 ? 'run' : 'idle';
           gtp.x = Math.max(20, Math.min(340, gtp.x));
           gtp.y = Math.max(COURT_FAR_Y, Math.min(COURT_NEAR_Y, gtp.y));
         }
@@ -4128,7 +4132,8 @@ function updatePlayers() {
       if (Math.abs(td2x) > 4) tp2.facing = td2x > 0 ? 1 : -1;
     }
     tp2.vx = tp2.x - prevTP2X; tp2.vy = tp2.y - prevTP2Y;
-    tp2.anim = Math.hypot(tp2.vx, tp2.vy) > 0.3 ? 'run' : 'idle';
+    tp2._animSpd = (tp2._animSpd || 0) * 0.6 + Math.hypot(tp2.vx, tp2.vy) * 0.4;
+    tp2.anim = tp2._animSpd > 0.5 ? 'run' : 'idle';
     tp2.x = Math.max(20, Math.min(350, tp2.x));
     tp2.y = Math.max(COURT_FAR_Y, Math.min(COURT_NEAR_Y, tp2.y));
 
@@ -4211,7 +4216,8 @@ function updateCPUDefense() {
     else { brendan.facing = -1; }
     if (Math.abs(zbDy) > 6) brendan.y += Math.sign(zbDy) * Math.min(1.2, Math.abs(zbDy));
     brendan.vx = brendan.x - prevZBX; brendan.vy = brendan.y - prevZBY;
-    brendan.anim = Math.hypot(brendan.vx, brendan.vy) > 0.3 ? 'run' : 'idle';
+    brendan._animSpd = (brendan._animSpd || 0) * 0.6 + Math.hypot(brendan.vx, brendan.vy) * 0.4;
+    brendan.anim = brendan._animSpd > 0.5 ? 'run' : 'idle';
     brendan.x = Math.max(20, Math.min(340, brendan.x));
     brendan.y = Math.max(COURT_FAR_Y, Math.min(COURT_NEAR_Y, brendan.y));
 
@@ -4221,7 +4227,8 @@ function updateCPUDefense() {
     else { will.facing = -1; }
     if (Math.abs(zwDy) > 6) will.y += Math.sign(zwDy) * Math.min(1.3, Math.abs(zwDy));
     will.vx = will.x - prevZWX; will.vy = will.y - prevZWY;
-    will.anim = Math.hypot(will.vx, will.vy) > 0.3 ? 'run' : 'idle';
+    will._animSpd = (will._animSpd || 0) * 0.6 + Math.hypot(will.vx, will.vy) * 0.4;
+    will.anim = will._animSpd > 0.5 ? 'run' : 'idle';
     will.y = Math.max(COURT_FAR_Y, Math.min(COURT_NEAR_Y, will.y));
 
     // Jump block logic still applies
@@ -4256,7 +4263,8 @@ function updateCPUDefense() {
   }
   if (Math.abs(bDy) > 8) brendan.y += Math.sign(bDy) * Math.min(1.9, Math.abs(bDy));
   brendan.vx = brendan.x - prevBX; brendan.vy = brendan.y - prevBY;
-  brendan.anim = Math.hypot(brendan.vx, brendan.vy) > 0.3 ? 'run' : 'idle';
+  brendan._animSpd = (brendan._animSpd || 0) * 0.6 + Math.hypot(brendan.vx, brendan.vy) * 0.4;
+  brendan.anim = brendan._animSpd > 0.5 ? 'run' : 'idle';
   brendan.x = Math.max(20, Math.min(340, brendan.x));
   brendan.y = Math.max(COURT_FAR_Y, Math.min(COURT_NEAR_Y, brendan.y));
 
@@ -4292,7 +4300,8 @@ function updateCPUDefense() {
   }
   if (Math.abs(jDy) > 8) will.y += Math.sign(jDy) * Math.min(1.2, Math.abs(jDy));
   will.vx = will.x - prevJX; will.vy = will.y - prevJY;
-  will.anim = Math.hypot(will.vx, will.vy) > 0.3 ? 'run' : 'idle';
+  will._animSpd = (will._animSpd || 0) * 0.6 + Math.hypot(will.vx, will.vy) * 0.4;
+  will.anim = will._animSpd > 0.5 ? 'run' : 'idle';
   will.y = Math.max(COURT_FAR_Y, Math.min(COURT_NEAR_Y, will.y));
 
   // NPC jump-block when human is charging shot
@@ -4364,7 +4373,8 @@ function updateCPUBehavior() {
     const prevBXcpu = brendan.x;
     if (Math.abs(dx) > 10) brendan.x += Math.sign(dx) * Math.min(brendanSpeed, Math.abs(dx));
     brendan.vx = brendan.x - prevBXcpu;
-    brendan.anim = Math.abs(brendan.vx) > 0.3 ? 'run' : 'idle';
+    brendan._animSpd = (brendan._animSpd || 0) * 0.6 + Math.abs(brendan.vx) * 0.4;
+    brendan.anim = brendan._animSpd > 0.5 ? 'run' : 'idle';
     brendan.x = Math.max(20, Math.min(340, brendan.x));
     const bOffY = brendan._willShoot ? COURT_FAR_Y + 4 : COURT_FAR_Y + 18;
     if (Math.abs(brendan.y - bOffY) > 6) brendan.y += Math.sign(bOffY - brendan.y) * 1.2;
@@ -4424,7 +4434,8 @@ function updateCPUBehavior() {
     const prevWXcpu = will.x;
     if (Math.abs(ddx) > 10) will.x += Math.sign(ddx) * Math.min(will._driving ? 2.8 : 2.0, Math.abs(ddx));
     will.vx = will.x - prevWXcpu;
-    will.anim = Math.abs(will.vx) > 0.3 ? 'run' : 'idle';
+    will._animSpd = (will._animSpd || 0) * 0.6 + Math.abs(will.vx) * 0.4;
+    will.anim = will._animSpd > 0.5 ? 'run' : 'idle';
     if (Math.abs(ddx) <= 10) {
       will._driving = false;
       // Will shoots after positioning — sometimes pump fakes first; post-up has lower timer
@@ -4460,7 +4471,8 @@ function updateCPUBehavior() {
         brendan._givingAndGoing = false;
       }
       brendan.vx = brendan.x - prevBGX;
-      brendan.anim = Math.abs(brendan.vx) > 0.3 ? 'run' : 'idle';
+      brendan._animSpd = (brendan._animSpd || 0) * 0.6 + Math.abs(brendan.vx) * 0.4;
+      brendan.anim = brendan._animSpd > 0.5 ? 'run' : 'idle';
     } else {
       const target_b = HOOP_X - 120;
       const bDiff = target_b - brendan.x;
@@ -4470,7 +4482,8 @@ function updateCPUBehavior() {
         brendan.facing = bDiff > 0 ? 1 : -1;
       }
       brendan.vx = brendan.x - prevBSX;
-      brendan.anim = Math.abs(brendan.vx) > 0.3 ? 'run' : 'idle';
+      brendan._animSpd = (brendan._animSpd || 0) * 0.6 + Math.abs(brendan.vx) * 0.4;
+      brendan.anim = brendan._animSpd > 0.5 ? 'run' : 'idle';
     }
     const target_j = HOOP_X - 160;
     const jDiff = target_j - will.x;
@@ -4480,7 +4493,8 @@ function updateCPUBehavior() {
       will.facing = jDiff > 0 ? 1 : -1;
     }
     will.vx = will.x - prevWSX;
-    will.anim = Math.abs(will.vx) > 0.3 ? 'run' : 'idle';
+    will._animSpd = (will._animSpd || 0) * 0.6 + Math.abs(will.vx) * 0.4;
+    will.anim = will._animSpd > 0.5 ? 'run' : 'idle';
   }
 }
 
