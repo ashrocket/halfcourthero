@@ -115,6 +115,7 @@ canvas {
   cursor: pointer;
 }
 </style>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 </head>
 <body>
 <div id="spotify-overlay">
@@ -399,6 +400,11 @@ function circle(x, y, r, fill, stroke, lw) {
   if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lw || 2; ctx.stroke(); }
 }
 
+// ── PvP globals ─────────────────────────────────────────────────
+let _pvpPeer = null;
+let _pvpConn = null;
+let _pvpSendTimer = 0;
+
 // ── State ───────────────────────────────────────────────────────
 let S = null;
 
@@ -487,6 +493,19 @@ function initState() {
     _fireModeFrames: 0,
     hoopFlash: 0,
     _fastBreak: 0,
+    // PvP
+    _pvp: null,               // 'host' | 'guest' | null
+    _pvpScreen: null,         // 'waiting' | 'connecting'
+    _pvpPeerId: null,
+    _pvpGuestActive: null,    // which Team B player guest controls
+    _pvpGuestJoy: { active: false, dx: 0, dy: 0 },
+    _pvpGuestShootHeld: false,
+    _pvpGuestShootPower: 0,
+    _pvpGuestBlockHeld: false,
+    _pvpGuestBlockPower: 0,
+    _pvpGuestPassReq: false,
+    _pvpGuestSwitchTo: null,
+    _pvpHostShootPower: 0,    // sent to guest so they can display meter
     _inboundDelay: 0,
     _lastPasser: null, // for assist tracking
 
@@ -1923,6 +1942,15 @@ function drawTitle() {
   ctx.letterSpacing = '0.18em';
   ctx.fillText('TAP TO PLAY', GW / 2, 590);
 
+  // VS FRIEND button
+  const vsPulse = 0.85 + Math.sin(S.frame * 0.05 + 1.2) * 0.15;
+  fillRR(GW / 2 - 74, 618, 148, 30, 10, `rgba(168,85,247,${vsPulse * 0.18})`, `rgba(168,85,247,${vsPulse * 0.7})`, 1.5);
+  ctx.fillStyle = `rgba(200,140,255,${vsPulse * 0.9})`;
+  ctx.font = 'bold 11px monospace'; ctx.textAlign = 'center'; ctx.letterSpacing = '0.14em';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('⚔ INVITE FRIEND', GW / 2, 633);
+  ctx.textBaseline = 'alphabetic';
+
   ctx.fillStyle = 'rgba(255,255,255,0.3)';
   ctx.font = 'bold 11px monospace'; ctx.letterSpacing = '0.12em';
   ctx.fillText('BANDMUSICGAMES.PARTY', GW / 2, GH - 20);
@@ -2053,6 +2081,278 @@ function startGameWithSelection() {
       window._pendingPlay = true;
     }
   }
+}
+
+// ── PvP ──────────────────────────────────────────────────────────
+
+function initPvPHost(player, teammate) {
+  S._pvp = 'host';
+  S._pvpScreen = 'waiting';
+  S.screen = 'pvpwait';
+  _pvpPeer = new Peer();
+  _pvpPeer.on('open', id => {
+    S._pvpPeerId = id;
+  });
+  _pvpPeer.on('connection', conn => {
+    _pvpConn = conn;
+    conn.on('data', data => {
+      if (data.t === 'hello') {
+        // Guest has connected and sent their team
+        TEAM_B_IDS = [data.player, data.teammate];
+        S._pvpGuestActive = data.player;
+        const posB = [[260, -1], [320, -1]];
+        for (let i = 0; i < 2; i++) {
+          S.players[TEAM_B_IDS[i]] = mkPlayer(TEAM_B_IDS[i], 'b', posB[i][0], posB[i][1]);
+          S.players[TEAM_B_IDS[i]].cpu = false;
+        }
+        conn.send({ t: 'ready' });
+        startGameWithSelection();
+      } else if (data.t === 'input') {
+        S._pvpGuestJoy = data.joy || { active: false, dx: 0, dy: 0 };
+        if (data.shootHeld !== undefined) {
+          if (data.shootHeld && !S._pvpGuestShootHeld) {
+            S._pvpGuestShootPower = 0;
+          }
+          if (!data.shootHeld && S._pvpGuestShootHeld && S._pvpGuestShootPower >= 8) {
+            // Guest released shoot — fire it
+            _triggerGuestShoot();
+          }
+          S._pvpGuestShootHeld = data.shootHeld;
+        }
+        if (data.blockHeld !== undefined) {
+          if (!data.blockHeld && S._pvpGuestBlockHeld && S._pvpGuestBlockPower >= 5) {
+            _triggerGuestBlock();
+          }
+          S._pvpGuestBlockHeld = data.blockHeld;
+        }
+        if (data.passReq) _triggerGuestPass();
+        if (data.switchTo) S._pvpGuestActive = data.switchTo;
+      }
+    });
+    conn.on('close', () => { _pvpConn = null; });
+  });
+}
+
+function initPvPGuest(hostId, player, teammate) {
+  S._pvp = 'guest';
+  S._pvpScreen = 'connecting';
+  S.screen = 'pvpconnect';
+  S._pvpGuestActive = player;
+  _pvpPeer = new Peer();
+  _pvpPeer.on('open', () => {
+    _pvpConn = _pvpPeer.connect(hostId, { serialization: 'json', reliable: false });
+    _pvpConn.on('open', () => {
+      _pvpConn.send({ t: 'hello', player, teammate });
+    });
+    _pvpConn.on('data', data => {
+      if (data.t === 'ready') {
+        S.screen = 'playing';
+      } else if (data.t === 'state') {
+        _applyRemoteState(data);
+      }
+    });
+    _pvpConn.on('close', () => {
+      _pvpConn = null;
+      S.scoreFlash = { text: '🔌 OPPONENT DISCONNECTED', color: '#FF4444', ttl: 120 };
+    });
+  });
+  _pvpPeer.on('error', () => {
+    S.scoreFlash = { text: '🔌 CONNECTION FAILED', color: '#FF4444', ttl: 120 };
+  });
+}
+
+function _applyRemoteState(data) {
+  if (!data.players) return;
+  for (const id of Object.keys(data.players)) {
+    if (S.players[id]) Object.assign(S.players[id], data.players[id]);
+  }
+  if (data.ball) Object.assign(S.ball, data.ball);
+  if (data.score) S.score = data.score;
+  if (data.possession !== undefined) S.possession = data.possession;
+  if (data.shotClock !== undefined) S.shotClock = data.shotClock;
+  if (data.activeHuman !== undefined) S.activeHuman = data.activeHuman;
+  if (data.pvpGuestActive !== undefined) S._pvpGuestActive = data.pvpGuestActive;
+  if (data.screen !== undefined && data.screen !== 'pvpwait' && data.screen !== 'pvpconnect') S.screen = data.screen;
+  if (data.scoreFlash) S.scoreFlash = data.scoreFlash;
+  if (data.shake) S.shake = data.shake;
+  if (data.paused !== undefined) S.paused = data.paused;
+  if (data.thoughts) S.thoughts = data.thoughts;
+  if (data.hoopFlash !== undefined) S.hoopFlash = data.hoopFlash;
+  // Shoot power: guest sees their OWN meter (from host's tracking)
+  if (data.guestShootPower !== undefined) S._pvpHostShootPower = data.guestShootPower;
+  if (data.guestShootHeld !== undefined) S._pvpGuestShootHeld = data.guestShootHeld;
+}
+
+function _sendStateToGuest() {
+  if (!_pvpConn || !_pvpConn.open) return;
+  const ps = {};
+  for (const id of [...TEAM_A_IDS, ...TEAM_B_IDS]) {
+    const p = S.players[id];
+    ps[id] = { x: p.x, y: p.y, vx: p.vx, vy: p.vy, anim: p.anim, facing: p.facing, jumpY: p.jumpY, hasBall: p.hasBall };
+  }
+  const b = S.ball;
+  _pvpConn.send({
+    t: 'state',
+    players: ps,
+    ball: { x: b.x, y: b.y, vx: b.vx, vy: b.vy, inAir: b.inAir, carrier: b.carrier, rot: b.rot, _made: b._made },
+    score: S.score,
+    possession: S.possession,
+    shotClock: S.shotClock,
+    activeHuman: S.activeHuman,
+    pvpGuestActive: S._pvpGuestActive,
+    screen: S.screen,
+    scoreFlash: S.scoreFlash,
+    shake: S.shake,
+    paused: S.paused,
+    thoughts: S.thoughts.filter(t => !t.particle).slice(0, 8),
+    hoopFlash: S.hoopFlash,
+    guestShootPower: S._pvpGuestShootPower,
+    guestShootHeld: S._pvpGuestShootHeld,
+  });
+}
+
+function _sendInputToHost() {
+  if (!_pvpConn || !_pvpConn.open) return;
+  _pvpConn.send({
+    t: 'input',
+    joy: { active: S.joy.active, dx: S.joy.dx, dy: S.joy.dy },
+    shootHeld: S._pvpGuestShootHeld || false,
+    blockHeld: S._pvpGuestBlockHeld || false,
+    passReq: S._pvpGuestPassReq || false,
+    switchTo: S._pvpGuestSwitchTo || null,
+  });
+  S._pvpGuestPassReq = false;
+  S._pvpGuestSwitchTo = null;
+}
+
+function _triggerGuestShoot() {
+  const prev = { activeHuman: S.activeHuman, shootHeld: S.shootHeld, shootPower: S.shootPower };
+  S.activeHuman = S._pvpGuestActive;
+  S.shootHeld = true;
+  S.shootPower = S._pvpGuestShootPower;
+  releaseShoot();
+  S.activeHuman = prev.activeHuman;
+  S.shootHeld = false;
+  S.shootPower = 0;
+  S._pvpGuestShootPower = 0;
+}
+
+function _triggerGuestBlock() {
+  const prev = { activeHuman: S.activeHuman, blockHeld: S.blockHeld, blockPower: S.blockPower };
+  S.activeHuman = S._pvpGuestActive;
+  S.blockHeld = true;
+  S.blockPower = S._pvpGuestBlockPower;
+  releaseBlock();
+  S.activeHuman = prev.activeHuman;
+  S.blockHeld = false;
+  S.blockPower = 0;
+  S._pvpGuestBlockPower = 0;
+}
+
+function _triggerGuestPass() {
+  if (S.possession !== 'b') return;
+  const prev = S.activeHuman;
+  S.activeHuman = S._pvpGuestActive;
+  if (!S.players[S._pvpGuestActive].hasBall) { S.activeHuman = prev; return; }
+  // Pass to the other Team B player
+  const ap = S.players[S._pvpGuestActive];
+  const tmId = TEAM_B_IDS.find(id => id !== S._pvpGuestActive);
+  const tp = S.players[tmId];
+  ap.hasBall = false;
+  S.ball.carrier = null;
+  S.ball.inAir = true;
+  S.ball.x = ap.x; S.ball.y = ap.y - 50;
+  const dx = tp.x - ap.x, dy = (tp.y - 55) - (ap.y - 50);
+  const tPass = Math.max(10, Math.hypot(dx, dy) / 14);
+  S.ball.vx = dx / tPass;
+  S.ball.vy = (dy - 0.225 * tPass * tPass) / tPass - 1;
+  S.ball._pass = true;
+  S.ball._passTarget = tmId;
+  S._pvpGuestActive = tmId;
+  S.activeHuman = prev;
+  spawnThought(tmId, 'CATCH!');
+  sfxPass();
+}
+
+function drawPvpWait() {
+  const bg = ctx.createLinearGradient(0, 0, 0, GH);
+  bg.addColorStop(0, '#1a0a3e'); bg.addColorStop(1, '#0a0a30');
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, GW, GH);
+
+  ctx.fillStyle = '#FFD700'; ctx.font = 'bold 13px monospace';
+  ctx.textAlign = 'center'; ctx.letterSpacing = '0.3em';
+  ctx.fillText('NARA\'S ROOM', GW / 2, 80);
+
+  ctx.fillStyle = '#FF1493'; ctx.font = 'bold 22px monospace';
+  ctx.letterSpacing = '0.1em';
+  ctx.fillText('⚔ VS FRIEND', GW / 2, 130);
+
+  if (!S._pvpPeerId) {
+    const dots = '.'.repeat((S.frame >> 3) % 4);
+    ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.font = 'bold 14px monospace';
+    ctx.letterSpacing = '0';
+    ctx.fillText('SETTING UP' + dots, GW / 2, 320);
+    return;
+  }
+
+  ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.font = 'bold 11px monospace';
+  ctx.letterSpacing = '0.08em';
+  ctx.fillText('SHARE THIS LINK WITH YOUR OPPONENT:', GW / 2, 210);
+
+  const inviteUrl = window.location.origin + '/?pvp=join&host=' + S._pvpPeerId;
+  const boxW = GW - 40;
+  fillRR(20, 228, boxW, 52, 10, 'rgba(0,0,0,0.6)', 'rgba(168,85,247,0.5)', 1.5);
+  ctx.fillStyle = '#c084fc'; ctx.font = 'bold 10px monospace'; ctx.letterSpacing = '0';
+  // Split URL across two lines if needed
+  const urlShort = inviteUrl.replace('https://', '').replace('http://', '');
+  ctx.fillText(urlShort, GW / 2, 258, boxW - 20);
+
+  // Copy hint
+  const copyPulse = 0.6 + Math.sin(S.frame * 0.08) * 0.3;
+  ctx.fillStyle = `rgba(200,140,255,${copyPulse})`; ctx.font = 'bold 10px monospace';
+  ctx.letterSpacing = '0.1em';
+  ctx.fillText('TAP LINK TO COPY', GW / 2, 295);
+
+  const dots2 = '.'.repeat((S.frame >> 4) % 4);
+  ctx.fillStyle = 'rgba(255,255,255,0.45)'; ctx.font = 'bold 13px monospace';
+  ctx.letterSpacing = '0.05em';
+  ctx.fillText('WAITING FOR OPPONENT' + dots2, GW / 2, 380);
+
+  // Show team summary
+  ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.font = 'bold 9px monospace';
+  ctx.letterSpacing = '0.08em';
+  ctx.fillText('YOUR TEAM', GW / 2, 440);
+  const p0 = CHARS[TEAM_A_IDS[0]];
+  const p1 = CHARS[TEAM_A_IDS[1]];
+  if (p0) { ctx.fillStyle = p0.hue; ctx.font = 'bold 13px monospace'; ctx.fillText(p0.name, GW / 2 - 60, 462); }
+  if (p1) { ctx.fillStyle = p1.hue; ctx.font = 'bold 13px monospace'; ctx.fillText(p1.name, GW / 2 + 60, 462); }
+}
+
+function drawPvpConnect() {
+  const bg = ctx.createLinearGradient(0, 0, 0, GH);
+  bg.addColorStop(0, '#1a0a3e'); bg.addColorStop(1, '#0a0a30');
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, GW, GH);
+
+  ctx.fillStyle = '#FFD700'; ctx.font = 'bold 13px monospace';
+  ctx.textAlign = 'center'; ctx.letterSpacing = '0.3em';
+  ctx.fillText('NARA\'S ROOM', GW / 2, 80);
+
+  ctx.fillStyle = '#FF1493'; ctx.font = 'bold 22px monospace';
+  ctx.letterSpacing = '0.1em';
+  ctx.fillText('⚔ VS FRIEND', GW / 2, 130);
+
+  const dots = '.'.repeat((S.frame >> 3) % 4);
+  ctx.fillStyle = 'rgba(255,255,255,0.65)'; ctx.font = 'bold 15px monospace';
+  ctx.letterSpacing = '0';
+  ctx.fillText('CONNECTING' + dots, GW / 2, 320);
+
+  ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.font = 'bold 9px monospace';
+  ctx.letterSpacing = '0.08em';
+  ctx.fillText('YOUR TEAM', GW / 2, 440);
+  const p0 = CHARS[TEAM_A_IDS[0]];
+  const p1 = CHARS[TEAM_A_IDS[1]];
+  if (p0) { ctx.fillStyle = p0.hue; ctx.font = 'bold 13px monospace'; ctx.fillText(p0.name, GW / 2 - 60, 462); }
+  if (p1) { ctx.fillStyle = p1.hue; ctx.font = 'bold 13px monospace'; ctx.fillText(p1.name, GW / 2 + 60, 462); }
 }
 
 function drawCharSprite(id, anim, f) {
@@ -2242,6 +2542,11 @@ canvas.addEventListener('touchstart', e => {
         if (x >= 156 && x < 244) { S._difficulty = 'normal'; continue; }
         if (x >= 244 && x < 330) { S._difficulty = 'hard';   continue; }
       }
+      // VS FRIEND button
+      if (y >= 614 && y <= 652 && Math.abs(x - GW / 2) <= 80) {
+        window.location.href = '/characters/?from=pvp';
+        return;
+      }
       window.location.href = '/characters/?from=play&difficulty=' + (S._difficulty || 'normal');
       return;
     }
@@ -2249,10 +2554,41 @@ canvas.addEventListener('touchstart', e => {
       window.location.href = '/characters/?from=play';
       return;
     }
+    if (S.screen === 'pvpwait' && S._pvpPeerId) {
+      if (y >= 228 && y <= 280) {
+        const url = window.location.origin + '/?pvp=join&host=' + S._pvpPeerId;
+        navigator.clipboard && navigator.clipboard.writeText(url).catch(() => {});
+      }
+      return;
+    }
     if (S.screen !== 'playing') return;
 
     const dShoot = Math.hypot(x - 300, y - 640);
     const dPass  = Math.hypot(x - 300, y - 710);
+
+    // Guest PvP: redirect button touches to guest input vars
+    if (S._pvp === 'guest') {
+      if (dShoot < 52) {
+        if (S.possession === 'b') { S._pvpGuestShootHeld = true; S._pvpGuestShootPower = 0; }
+        else                      { S._pvpGuestBlockHeld = true; S._pvpGuestBlockPower = 0; }
+        continue;
+      }
+      if (dPass < 38 && S.possession === 'b') {
+        S._pvpGuestPassReq = true;
+        continue;
+      }
+      if (S.possession === 'a') {
+        const tmId = TEAM_B_IDS.find(id => id !== S._pvpGuestActive);
+        if (tmId && Math.hypot(x - S.players[tmId].x, y - S.players[tmId].y) < 55) {
+          S._pvpGuestSwitchTo = tmId;
+          continue;
+        }
+      }
+      if (x < GW * 0.65 && !S.joy.active) {
+        S.joy = { active: true, id: t.identifier, ox: x, oy: y, dx: 0, dy: 0 };
+      }
+      continue;
+    }
 
     if (dShoot < 52) {
       if (S.possession === 'a') {
@@ -2315,10 +2651,15 @@ canvas.addEventListener('touchend', e => {
     }
     const { x, y } = toGameCoords(t.clientX, t.clientY);
     if (Math.hypot(x - 300, y - 640) < 52) {
-      if (S.possession === 'a' && S.shootHeld) releaseShoot();
-      else if (S.possession === 'b' && S.blockHeld) releaseBlock();
-      S.shootHeld = false;
-      S.blockHeld = false;
+      if (S._pvp === 'guest') {
+        S._pvpGuestShootHeld = false;
+        S._pvpGuestBlockHeld = false;
+      } else {
+        if (S.possession === 'a' && S.shootHeld) releaseShoot();
+        else if (S.possession === 'b' && S.blockHeld) releaseBlock();
+        S.shootHeld = false;
+        S.blockHeld = false;
+      }
     }
   }
 }, { passive: false });
@@ -2408,6 +2749,10 @@ canvas.addEventListener('mousedown', e => {
       if (x >= 156 && x < 244) { S._difficulty = 'normal'; return; }
       if (x >= 244 && x < 330) { S._difficulty = 'hard';   return; }
     }
+    if (y >= 614 && y <= 652 && Math.abs(x - GW / 2) <= 80) {
+      window.location.href = '/characters/?from=pvp';
+      return;
+    }
     window.location.href = '/characters/?from=play&difficulty=' + (S._difficulty || 'normal');
     return;
   }
@@ -2415,9 +2760,27 @@ canvas.addEventListener('mousedown', e => {
     window.location.href = '/characters/?from=play';
     return;
   }
+  if (S.screen === 'pvpwait' && S._pvpPeerId) {
+    if (y >= 228 && y <= 280) {
+      const url = window.location.origin + '/?pvp=join&host=' + S._pvpPeerId;
+      navigator.clipboard && navigator.clipboard.writeText(url).catch(() => {});
+    }
+    return;
+  }
   if (S.screen !== 'playing') return;
   const dShoot = Math.hypot(x - 300, y - 640);
   const dPass  = Math.hypot(x - 300, y - 710);
+  // Guest PvP: redirect to guest input vars
+  if (S._pvp === 'guest') {
+    if (dShoot < 52) {
+      if (S.possession === 'b') { S._pvpGuestShootHeld = true; S._pvpGuestShootPower = 0; }
+      else                      { S._pvpGuestBlockHeld = true; S._pvpGuestBlockPower = 0; }
+      return;
+    }
+    if (dPass < 38 && S.possession === 'b') { S._pvpGuestPassReq = true; return; }
+    if (x < GW * 0.65) S.joy = { active: true, id: 99, ox: x, oy: y, dx: 0, dy: 0 };
+    return;
+  }
   if (dShoot < 52) {
     if (S.possession === 'a') {
       S.shootHeld = true; S.shootPower = 0;
@@ -2457,9 +2820,14 @@ canvas.addEventListener('mousemove', e => {
   S.joy.dx = dx; S.joy.dy = dy;
 });
 canvas.addEventListener('mouseup', () => {
-  if (S.possession === 'a' && S.shootHeld) releaseShoot();
-  else if (S.possession === 'b' && S.blockHeld) releaseBlock();
-  S.shootHeld = false; S.blockHeld = false;
+  if (S._pvp === 'guest') {
+    S._pvpGuestShootHeld = false;
+    S._pvpGuestBlockHeld = false;
+  } else {
+    if (S.possession === 'a' && S.shootHeld) releaseShoot();
+    else if (S.possession === 'b' && S.blockHeld) releaseBlock();
+    S.shootHeld = false; S.blockHeld = false;
+  }
   S.joy = { active: false, id: -1, ox: 0, oy: 0, dx: 0, dy: 0 };
 });
 
@@ -2471,6 +2839,8 @@ function releaseShoot() {
   if (!ap.hasBall) { S.shootPower = 0; return; }
   const power = S.shootPower;
   S.shootPower = 0;
+  // Determine defending team dynamically (supports PvP)
+  const _defIds = TEAM_A_IDS.includes(ap.id) ? TEAM_B_IDS : TEAM_A_IDS;
   if (power < 8) { ap.anim = 'idle'; return; } // too light, abort
 
   // Pump fake: very quick release (<13 frames) — freeze nearby defenders
@@ -2478,7 +2848,7 @@ function releaseShoot() {
     ap.anim = 'shoot';
     spawnThought(ap.id, '👀 PUMP FAKE!');
     S._possessionMoves = (S._possessionMoves || 0) + 1;
-    for (const def of TEAM_B_IDS) {
+    for (const def of _defIds) {
       const dp = S.players[def];
       if (Math.hypot(ap.x - dp.x, ap.y - dp.y) < 72 && dp._jumpVy === 0 && dp.jumpY === 0) {
         dp._jumpVy = -7;
@@ -2523,9 +2893,9 @@ function releaseShoot() {
   if (dist < 70) {
     const isDunk = dist < 38 && power >= 40;
     // Breakaway dunk: fast break, open lane, no defenders nearby
-    const breakawayOpen = S._fastBreak > 60 && TEAM_B_IDS.every(id => Math.hypot(S.players[id].x - ap.x, S.players[id].y - ap.y) > 100);
+    const breakawayOpen = S._fastBreak > 60 && _defIds.every(id => Math.hypot(S.players[id].x - ap.x, S.players[id].y - ap.y) > 100);
     // Poster dunk: dunk OVER a defender who's in the paint
-    const defInPaint = TEAM_B_IDS.find(id => Math.abs(S.players[id].x - HOOP_X) < 50 && Math.hypot(S.players[id].x - ap.x, 0) < 48);
+    const defInPaint = _defIds.find(id => Math.abs(S.players[id].x - HOOP_X) < 50 && Math.hypot(S.players[id].x - ap.x, 0) < 48);
     const isPoster = isDunk && defInPaint && Math.abs(ap.vx) > 1.8 && Math.random() < 0.45;
     if (breakawayOpen && isDunk) {
       acc = 1.0; timingText = '🚀 BREAKAWAY DUNK!';
@@ -2539,7 +2909,7 @@ function releaseShoot() {
       acc = 0.97; timingText = '💥 DUNK!';
     } else {
       // Euro Step: driving hard AND moving laterally (around defender)
-      const defInLane = TEAM_B_IDS.some(id => S.players[id].x > HOOP_X - 80 && Math.abs(S.players[id].y - ap.y) < 55);
+      const defInLane = _defIds.some(id => S.players[id].x > HOOP_X - 80 && Math.abs(S.players[id].y - ap.y) < 55);
       const isEuroStep = Math.abs(ap.vx) > 2.2 && Math.abs(ap.vy) > 0.9 && defInLane;
       acc = Math.min(acc + 0.24, 0.96);
       if (isEuroStep) {
@@ -2563,11 +2933,11 @@ function releaseShoot() {
   if (ap.jumpY < -20) acc = Math.min(acc + 0.05, 0.99);
 
   // Wide open / contested bonus
-  const closestDef = Math.min(...TEAM_B_IDS.map(id => Math.hypot(S.players[id].x - ap.x, S.players[id].y - ap.y)));
+  const closestDef = Math.min(..._defIds.map(id => Math.hypot(S.players[id].x - ap.x, S.players[id].y - ap.y)));
   const wideOpen = closestDef > 85;
   const contested = closestDef < 38;
   // Brendan's PAINT BEAST: extra contest penalty in the paint
-  const brendanClose = Math.hypot(S.players[TEAM_B_IDS[0]].x - ap.x, S.players[TEAM_B_IDS[0]].y - ap.y) < 42;
+  const brendanClose = _defIds.includes('brendan') && Math.hypot(S.players['brendan'].x - ap.x, S.players['brendan'].y - ap.y) < 42;
   const paintBeastPenalty = brendanClose && dist < SHOT_RANGE_2 && CHARS.brendan._paintBlock ? 0.06 : 0;
   if (wideOpen && dist > SHOT_RANGE_LAY) {
     acc = Math.min(acc + 0.06, 0.99);
@@ -2629,7 +2999,7 @@ function releaseShoot() {
 
   // Floater: one-handed scoop while driving into paint with a lane defender
   const isFloater = ap.vx > 2.0 && dist > SHOT_RANGE_LAY && dist < SHOT_RANGE_LAY + 62 &&
-    TEAM_B_IDS.some(id => {
+    _defIds.some(id => {
       const dp = S.players[id];
       return dp.x > HOOP_X - 70 && Math.abs(dp.y - ap.y) < 60;
     });
@@ -3662,8 +4032,54 @@ function updatePlayers() {
     tp.y = Math.max(COURT_FAR_Y, Math.min(COURT_NEAR_Y, tp.y));
 
   } else {
-    // CPU offense
-    if (S._inboundDelay > 0) {
+    // CPU offense (or PvP guest offense)
+    if (S._pvp === 'host') {
+      // PvP: guest controls Team B
+      if (S._inboundDelay > 0) {
+        S._inboundDelay--;
+      } else {
+        const gJoy = S._pvpGuestJoy || {};
+        const ga = S.players[S._pvpGuestActive];
+        if (ga) {
+          const jNorm = Math.hypot(gJoy.dx || 0, gJoy.dy || 0);
+          if (gJoy.active && jNorm > 8) {
+            const targetVx = (gJoy.dx / 55) * 3.5;
+            const targetVy = (gJoy.dy / 55) * 3.5 * 0.6;
+            ga.vx += (targetVx - ga.vx) * 0.28;
+            ga.vy += (targetVy - ga.vy) * 0.28;
+            if (Math.abs(gJoy.dx) > 6) ga.facing = gJoy.dx > 0 ? 1 : -1;
+            ga.anim = 'run';
+          } else {
+            ga.vx *= 0.72; ga.vy *= 0.72;
+            if (Math.hypot(ga.vx, ga.vy) < 0.3) { ga.vx = 0; ga.vy = 0; ga.anim = 'idle'; }
+          }
+          ga.x = Math.max(20, Math.min(340, ga.x + ga.vx));
+          ga.y = Math.max(COURT_FAR_Y, Math.min(COURT_NEAR_Y, ga.y + ga.vy));
+        }
+        // Guest's teammate: auto-position on wing
+        const gTm = TEAM_B_IDS.find(id => id !== S._pvpGuestActive);
+        if (gTm) {
+          const gtp = S.players[gTm];
+          const wmx = (ga && ga.x < 185) ? HOOP_X - 52 : 110;
+          const wmy = COURT_FAR_Y + 16;
+          const gtdx = wmx - gtp.x, gtdy = wmy - gtp.y;
+          if (Math.abs(gtdx) > 8 || Math.abs(gtdy) > 8) {
+            gtp.x += Math.sign(gtdx) * Math.min(2.0, Math.abs(gtdx));
+            gtp.y += Math.sign(gtdy) * Math.min(1.2, Math.abs(gtdy));
+            gtp.anim = 'run'; gtp.facing = gtdx > 0 ? 1 : -1;
+          } else gtp.anim = 'idle';
+          gtp.x = Math.max(20, Math.min(340, gtp.x));
+          gtp.y = Math.max(COURT_FAR_Y, Math.min(COURT_NEAR_Y, gtp.y));
+        }
+        // Update guest shoot/block power
+        if (S._pvpGuestShootHeld) {
+          S._pvpGuestShootPower = Math.min(100, (S._pvpGuestShootPower || 0) + 1);
+        }
+        if (S._pvpGuestBlockHeld) {
+          S._pvpGuestBlockPower = Math.min(100, (S._pvpGuestBlockPower || 0) + 1);
+        }
+      }
+    } else if (S._inboundDelay > 0) {
       S._inboundDelay--;
     } else {
       updateCPUBehavior();
@@ -3693,7 +4109,7 @@ function updatePlayers() {
     ap.x = Math.max(20, Math.min(350, ap.x + ap.vx));
     ap.y = Math.max(COURT_FAR_Y, Math.min(COURT_NEAR_Y, ap.y + ap.vy));
 
-    // Second defender marks the non-ball CPU player
+    // Second defender marks the non-ball CPU/guest player
     const teammate = TEAM_A_IDS.find(id => id !== S.activeHuman);
     const tp2 = S.players[teammate];
     const cpuNoBall = TEAM_B_IDS.find(id => !S.players[id].hasBall);
@@ -3708,6 +4124,32 @@ function updatePlayers() {
     } else tp2.anim = 'idle';
     tp2.x = Math.max(20, Math.min(350, tp2.x));
     tp2.y = Math.max(COURT_FAR_Y, Math.min(COURT_NEAR_Y, tp2.y));
+
+    // PvP: guest defends with their Team B player using reversed-x joy
+    if (S._pvp === 'host') {
+      const gJoy = S._pvpGuestJoy || {};
+      const gd = S.players[S._pvpGuestActive];
+      if (gd) {
+        const jNorm = Math.hypot(gJoy.dx || 0, gJoy.dy || 0);
+        if (gJoy.active && jNorm > 8) {
+          const targetVx = (-gJoy.dx / 55) * 3.2;
+          const targetVy = (gJoy.dy / 55) * 3.2 * 0.6;
+          gd.vx += (targetVx - gd.vx) * 0.3;
+          gd.vy += (targetVy - gd.vy) * 0.3;
+          if (Math.abs(gJoy.dx) > 6) gd.facing = gJoy.dx > 0 ? -1 : 1;
+          gd.anim = 'run';
+        } else {
+          gd.vx *= 0.72; gd.vy *= 0.72;
+          if (Math.hypot(gd.vx, gd.vy) < 0.3) { gd.vx = 0; gd.vy = 0; gd.anim = 'idle'; }
+        }
+        gd.x = Math.max(20, Math.min(350, gd.x + gd.vx));
+        gd.y = Math.max(COURT_FAR_Y, Math.min(COURT_NEAR_Y, gd.y + gd.vy));
+      }
+      // Guest block power
+      if (S._pvpGuestBlockHeld) {
+        S._pvpGuestBlockPower = Math.min(100, (S._pvpGuestBlockPower || 0) + 1);
+      }
+    }
   }
 
   // Always face hoop when on offense and not actively steering
@@ -4135,6 +4577,16 @@ function loop(now) {
     return;
   }
 
+  if (S.screen === 'pvpwait') {
+    drawPvpWait();
+    return;
+  }
+
+  if (S.screen === 'pvpconnect') {
+    drawPvpConnect();
+    return;
+  }
+
   if (S.screen === 'gameover') {
     drawGameOver();
     return;
@@ -4170,14 +4622,27 @@ function loop(now) {
   }
 
   // ── Update ──────────────────────────────────────────────────────
-  applyKeyboard();
-  updatePlayers();
-  updateBall();
-  updateShootPower();
-  updateThoughts();
-  updateScoreFlash();
-  if (S.onboardingTimer > 0) S.onboardingTimer--;
-  if (S.shake > 0) S.shake--;
+  if (S._pvp === 'guest') {
+    // Guest: send input to host, render received state only
+    _sendInputToHost();
+    updateThoughts();
+    updateScoreFlash();
+    if (S.shake > 0) S.shake--;
+  } else {
+    applyKeyboard();
+    updatePlayers();
+    updateBall();
+    updateShootPower();
+    updateThoughts();
+    updateScoreFlash();
+    if (S.onboardingTimer > 0) S.onboardingTimer--;
+    if (S.shake > 0) S.shake--;
+    // Host: send state to guest every 2 frames (~30fps)
+    if (S._pvp === 'host' && S.screen === 'playing') {
+      _pvpSendTimer++;
+      if (_pvpSendTimer >= 2) { _pvpSendTimer = 0; _sendStateToGuest(); }
+    }
+  }
 
   // Crowd energy decay (slow fade unless something exciting happens)
   if (S.frame % 60 === 0) S._crowdEnergy = Math.max(0, (S._crowdEnergy || 0) - 3);
@@ -4574,12 +5039,28 @@ function loop(now) {
 // ── Boot ─────────────────────────────────────────────────────────
 initState();
 (function() {
-  const _p = new URLSearchParams(window.location.search);
-  if (_p.get('player') && _p.get('teammate')) {
-    S._selectedPlayer   = _p.get('player');
-    S._selectedTeammate = _p.get('teammate');
+  const _p      = new URLSearchParams(window.location.search);
+  const pvp     = _p.get('pvp');
+  const player  = _p.get('player');
+  const teammate = _p.get('teammate');
+
+  // Guest visiting bare invite link (?pvp=join&host=ID) — no picks yet
+  if (pvp === 'join' && _p.get('host') && !player) {
+    window.location.replace('/characters/?from=pvp&host=' + encodeURIComponent(_p.get('host')));
+    return;
+  }
+
+  if (player && teammate) {
+    S._selectedPlayer   = player;
+    S._selectedTeammate = teammate;
     if (_p.get('difficulty')) S._difficulty = _p.get('difficulty');
-    startGameWithSelection();
+    if (pvp === 'host') {
+      initPvPHost(player, teammate);
+    } else if (pvp === 'join' && _p.get('host')) {
+      initPvPGuest(_p.get('host'), player, teammate);
+    } else {
+      startGameWithSelection();
+    }
   }
 })();
 loop();

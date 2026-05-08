@@ -84,14 +84,17 @@ const CHARS = [
 ];
 
 // ── Picker mode detection ───────────────────────────────────────
-const _params   = new URLSearchParams(window.location.search);
-const _fromPlay = _params.get('from') === 'play';
+const _params     = new URLSearchParams(window.location.search);
+const _fromPlay   = _params.get('from') === 'play';
+const _fromPvp    = _params.get('from') === 'pvp';
+const _pvpHostId  = _params.get('host') || null;   // set when guest follows invite link
 const _difficulty = _params.get('difficulty') || 'normal';
+const _pickerMode = _fromPlay || _fromPvp;
 
 let _pickerStep   = 1;   // 1 = pick player, 2 = pick teammate
 let _pickedPlayer = null;
 
-if (_fromPlay) {
+if (_pickerMode) {
   document.getElementById('title-main').textContent = 'PICK YOUR PLAYER';
   document.getElementById('back-btn').href = '/';
   document.getElementById('back-btn').textContent = '← BACK';
@@ -145,7 +148,7 @@ function roundedRect(x, y, w, h, r) {
 function next(delta) {
   let newSel = (selected + delta + CHARS.length) % CHARS.length;
   // In picker step 2, skip the already-picked player
-  if (_fromPlay && _pickerStep === 2 && CHARS[newSel].id === _pickedPlayer) {
+  if (_pickerMode && _pickerStep === 2 && CHARS[newSel].id === _pickedPlayer) {
     newSel = (newSel + delta + CHARS.length) % CHARS.length;
   }
   selected = newSel;
@@ -164,7 +167,7 @@ function layout() {
   const characterTop = isWide ? H * 0.22 : H * 0.12;
 
   // In picker mode, reserve extra space at bottom for the action button
-  const pickerOffset = _fromPlay ? 60 * dpr : 0;
+  const pickerOffset = _pickerMode ? 60 * dpr : 0;
   const characterBottom = labelY - (isWide ? 150 : 90) * dpr;
   const maxBodyH = Math.max(150 * dpr, characterBottom - characterTop);
   const bodyH = isWide
@@ -188,9 +191,9 @@ function layout() {
     leftX: W * 0.18,
     rightX: W * 0.82,
     labelY,
-    summaryY: _fromPlay ? summaryY - pickerOffset * 0.5 : summaryY,
+    summaryY: _pickerMode ? summaryY - pickerOffset * 0.5 : summaryY,
     summaryH,
-    dotY: _fromPlay ? dotY - pickerOffset : dotY,
+    dotY: _pickerMode ? dotY - pickerOffset : dotY,
     dotW,
     dotH: 38 * dpr,
     gap,
@@ -223,7 +226,7 @@ function hitTestPicker(x, y) {
 }
 
 function hitTest(x, y) {
-  if (_fromPlay) return hitTestPicker(x, y);
+  if (_pickerMode) return hitTestPicker(x, y);
 
   const l = layout();
   const { dotW, dotH, gap } = l;
@@ -256,7 +259,17 @@ function handlePickerAction() {
   } else {
     // Pick teammate — navigate to game
     if (c.id === _pickedPlayer) return; // can't pick same player
-    window.location.href = `/?player=${_pickedPlayer}&teammate=${c.id}&difficulty=${_difficulty}`;
+    if (_fromPvp) {
+      if (_pvpHostId) {
+        // Guest: join existing host
+        window.location.href = `/?pvp=join&host=${encodeURIComponent(_pvpHostId)}&player=${_pickedPlayer}&teammate=${c.id}`;
+      } else {
+        // Host: create new PvP lobby
+        window.location.href = `/?pvp=host&player=${_pickedPlayer}&teammate=${c.id}`;
+      }
+    } else {
+      window.location.href = `/?player=${_pickedPlayer}&teammate=${c.id}&difficulty=${_difficulty}`;
+    }
   }
 }
 
@@ -293,8 +306,8 @@ canvas.addEventListener('touchend', e => {
 window.addEventListener('keydown', e => {
   if (e.key === 'ArrowLeft') next(-1);
   if (e.key === 'ArrowRight') next(1);
-  if (_fromPlay && (e.key === 'Enter' || e.key === ' ')) handlePickerAction();
-  if (!_fromPlay && (e.key === 'Enter' || e.key === ' ')) zoomed = !zoomed;
+  if (_pickerMode && (e.key === 'Enter' || e.key === ' ')) handlePickerAction();
+  if (!_pickerMode && (e.key === 'Enter' || e.key === ' ')) zoomed = !zoomed;
 });
 
 function drawSprite(c, cx, floor, h, alpha = 1, glow = false) {
@@ -402,7 +415,7 @@ function drawDots() {
   CHARS.forEach((c, i) => {
     const x = start + i * (dotW + gap);
     const isActive = i === selected;
-    const isPickedPlayer = _fromPlay && _pickerStep === 2 && c.id === _pickedPlayer;
+    const isPickedPlayer = _pickerMode && _pickerStep === 2 && c.id === _pickedPlayer;
     ctx.save();
     if (isPickedPlayer) ctx.globalAlpha = 0.35;
     roundedRect(x, l.dotY - dotH / 2, dotW, dotH, 6 * l.dpr);
@@ -421,7 +434,7 @@ function drawDots() {
 }
 
 function drawPickerBadge() {
-  if (!_fromPlay || _pickerStep !== 2 || !_pickedPlayer) return;
+  if (!_pickerMode || _pickerStep !== 2 || !_pickedPlayer) return;
   const l = layout();
   const dpr = l.dpr;
   const pc = CHARS.find(c => c.id === _pickedPlayer);
@@ -449,7 +462,7 @@ function drawPickerBadge() {
 }
 
 function drawActionButton() {
-  if (!_fromPlay) return;
+  if (!_pickerMode) return;
   const l = layout();
   const dpr = l.dpr;
   const c = activeChar(0);
@@ -515,7 +528,7 @@ function drawFrame() {
   ctx.clearRect(0, 0, W, H);
   const l = layout();
   const c = activeChar(0);
-  const isGrayedOut = _fromPlay && _pickerStep === 2 && c.id === _pickedPlayer;
+  const isGrayedOut = _pickerMode && _pickerStep === 2 && c.id === _pickedPlayer;
 
   const grd = ctx.createRadialGradient(W / 2, H * 0.54, 0, W / 2, H * 0.54, H * 0.72);
   grd.addColorStop(0, (isGrayedOut ? '#888888' : c.hue) + '22');
@@ -527,12 +540,12 @@ function drawFrame() {
   // Side sprites (dim picked player in step 2)
   const prevC = activeChar(-1);
   const nextC = activeChar(1);
-  const prevAlpha = (_fromPlay && _pickerStep === 2 && prevC.id === _pickedPlayer) ? 0.1 : 0.28;
-  const nextAlpha = (_fromPlay && _pickerStep === 2 && nextC.id === _pickedPlayer) ? 0.1 : 0.28;
+  const prevAlpha = (_pickerMode && _pickerStep === 2 && prevC.id === _pickedPlayer) ? 0.1 : 0.28;
+  const nextAlpha = (_pickerMode && _pickerStep === 2 && nextC.id === _pickedPlayer) ? 0.1 : 0.28;
   drawSprite(prevC, l.leftX, l.sideY, l.sideH, prevAlpha, false);
   drawSprite(nextC, l.rightX, l.sideY, l.sideH, nextAlpha, false);
 
-  if (zoomed && !_fromPlay) {
+  if (zoomed && !_pickerMode) {
     drawFace(c);
     drawName(c, l.labelY, true);
     drawSummary(c, l.summaryY);
@@ -552,7 +565,7 @@ function drawFrame() {
   }
 
   drawArrows();
-  if (_fromPlay) {
+  if (_pickerMode) {
     drawActionButton();
     drawPickerBadge();
   } else {
