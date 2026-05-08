@@ -47,10 +47,10 @@
 <div id="stage">
   <div class="title">
     <div class="title-top">NARA'S ROOM</div>
-    <div class="title-main">THE BAND</div>
+    <div id="title-main" class="title-main">THE BAND</div>
   </div>
   <canvas id="cv"></canvas>
-  <a class="back-btn" href="/">← PLAY!</a>
+  <a id="back-btn" class="back-btn" href="/">← PLAY!</a>
   <div class="hint"></div>
 </div>
 
@@ -82,6 +82,20 @@ const CHARS = [
     hue: '#9B59B6', sprite: '../assets/will_sprite.png', face: [40, 0, 350, 345],
   },
 ];
+
+// ── Picker mode detection ───────────────────────────────────────
+const _params   = new URLSearchParams(window.location.search);
+const _fromPlay = _params.get('from') === 'play';
+const _difficulty = _params.get('difficulty') || 'normal';
+
+let _pickerStep   = 1;   // 1 = pick player, 2 = pick teammate
+let _pickedPlayer = null;
+
+if (_fromPlay) {
+  document.getElementById('title-main').textContent = 'PICK YOUR PLAYER';
+  document.getElementById('back-btn').href = '/';
+  document.getElementById('back-btn').textContent = '← BACK';
+}
 
 const canvas = document.getElementById('cv');
 const ctx    = canvas.getContext('2d');
@@ -129,7 +143,12 @@ function roundedRect(x, y, w, h, r) {
 }
 
 function next(delta) {
-  selected = (selected + delta + CHARS.length) % CHARS.length;
+  let newSel = (selected + delta + CHARS.length) % CHARS.length;
+  // In picker step 2, skip the already-picked player
+  if (_fromPlay && _pickerStep === 2 && CHARS[newSel].id === _pickedPlayer) {
+    newSel = (newSel + delta + CHARS.length) % CHARS.length;
+  }
+  selected = newSel;
   zoomed = false;
 }
 
@@ -143,6 +162,9 @@ function layout() {
   const summaryY = dotY - 118 * dpr;
   const labelY = summaryY - 108 * dpr;
   const characterTop = isWide ? H * 0.22 : H * 0.12;
+
+  // In picker mode, reserve extra space at bottom for the action button
+  const pickerOffset = _fromPlay ? 60 * dpr : 0;
   const characterBottom = labelY - (isWide ? 150 : 90) * dpr;
   const maxBodyH = Math.max(150 * dpr, characterBottom - characterTop);
   const bodyH = isWide
@@ -150,6 +172,12 @@ function layout() {
     : Math.min(H * 0.42, W * 0.65, maxBodyH);
   const floor = characterTop + bodyH;
   const sideY = floor + 8 * dpr;
+
+  // Action button (picker mode)
+  const actionBtnH = 52 * dpr;
+  const actionBtnY = H - 20 * dpr - actionBtnH;
+  const actionBtnW = Math.min(W * 0.72, 340 * dpr);
+
   return {
     dpr,
     cx: W * 0.5,
@@ -160,12 +188,15 @@ function layout() {
     leftX: W * 0.18,
     rightX: W * 0.82,
     labelY,
-    summaryY,
+    summaryY: _fromPlay ? summaryY - pickerOffset * 0.5 : summaryY,
     summaryH,
-    dotY,
+    dotY: _fromPlay ? dotY - pickerOffset : dotY,
     dotW,
     dotH: 38 * dpr,
     gap,
+    actionBtnY,
+    actionBtnH,
+    actionBtnW,
   };
 }
 
@@ -175,7 +206,25 @@ function eventPoint(e) {
   return [(e.clientX - r.left) * dpr, (e.clientY - r.top) * dpr];
 }
 
+function hitTestPicker(x, y) {
+  const l = layout();
+  // Action button hit test
+  const bx = W / 2 - l.actionBtnW / 2;
+  if (x >= bx && x <= bx + l.actionBtnW &&
+      y >= l.actionBtnY && y <= l.actionBtnY + l.actionBtnH) {
+    return { type: 'action' };
+  }
+  // Arrow hit test
+  if (x < W * 0.28 && y > H * 0.18 && y < H * 0.86) return { type: 'prev' };
+  if (x > W * 0.72 && y > H * 0.18 && y < H * 0.86) return { type: 'next' };
+  // Center sprite tap
+  if (x > W * 0.28 && x < W * 0.72 && y > H * 0.18 && y < H * 0.86) return { type: 'action' };
+  return null;
+}
+
 function hitTest(x, y) {
+  if (_fromPlay) return hitTestPicker(x, y);
+
   const l = layout();
   const { dotW, dotH, gap } = l;
   const total = CHARS.length * dotW + (CHARS.length - 1) * gap;
@@ -193,10 +242,29 @@ function hitTest(x, y) {
   return null;
 }
 
+function handlePickerAction() {
+  const c = activeChar(0);
+  if (_pickerStep === 1) {
+    // Pick player
+    _pickedPlayer = c.id;
+    _pickerStep = 2;
+    document.getElementById('title-main').textContent = 'PICK TEAMMATE';
+    // Move to a different character if current is the picked one
+    const nextIdx = CHARS.findIndex(ch => ch.id !== _pickedPlayer);
+    selected = nextIdx >= 0 ? nextIdx : 0;
+    zoomed = false;
+  } else {
+    // Pick teammate — navigate to game
+    if (c.id === _pickedPlayer) return; // can't pick same player
+    window.location.href = `/?player=${_pickedPlayer}&teammate=${c.id}&difficulty=${_difficulty}`;
+  }
+}
+
 function handle(action) {
   if (!action) return;
   if (action.type === 'prev') next(-1);
   if (action.type === 'next') next(1);
+  if (action.type === 'action') handlePickerAction();
   if (action.type === 'toggle') zoomed = !zoomed;
   if (action.type === 'select') {
     zoomed = action.index === selected ? !zoomed : false;
@@ -225,7 +293,8 @@ canvas.addEventListener('touchend', e => {
 window.addEventListener('keydown', e => {
   if (e.key === 'ArrowLeft') next(-1);
   if (e.key === 'ArrowRight') next(1);
-  if (e.key === 'Enter' || e.key === ' ') zoomed = !zoomed;
+  if (_fromPlay && (e.key === 'Enter' || e.key === ' ')) handlePickerAction();
+  if (!_fromPlay && (e.key === 'Enter' || e.key === ' ')) zoomed = !zoomed;
 });
 
 function drawSprite(c, cx, floor, h, alpha = 1, glow = false) {
@@ -333,7 +402,9 @@ function drawDots() {
   CHARS.forEach((c, i) => {
     const x = start + i * (dotW + gap);
     const isActive = i === selected;
+    const isPickedPlayer = _fromPlay && _pickerStep === 2 && c.id === _pickedPlayer;
     ctx.save();
+    if (isPickedPlayer) ctx.globalAlpha = 0.35;
     roundedRect(x, l.dotY - dotH / 2, dotW, dotH, 6 * l.dpr);
     ctx.fillStyle = isActive ? c.hue : 'rgba(0,0,0,0.65)';
     ctx.strokeStyle = c.hue;
@@ -347,6 +418,72 @@ function drawDots() {
     ctx.fillText(c.name, x + dotW / 2, l.dotY);
     ctx.restore();
   });
+}
+
+function drawPickerBadge() {
+  if (!_fromPlay || _pickerStep !== 2 || !_pickedPlayer) return;
+  const l = layout();
+  const dpr = l.dpr;
+  const pc = CHARS.find(c => c.id === _pickedPlayer);
+  if (!pc) return;
+
+  // Small "YOU: NAME" badge in top-right area
+  const badgeW = 130 * dpr;
+  const badgeH = 32 * dpr;
+  const bx = W - badgeW - 12 * dpr;
+  const by = 16 * dpr;
+
+  ctx.save();
+  roundedRect(bx, by, badgeW, badgeH, 8 * dpr);
+  ctx.fillStyle = 'rgba(0,0,0,0.7)';
+  ctx.strokeStyle = pc.hue;
+  ctx.lineWidth = 1.5 * dpr;
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = pc.hue;
+  ctx.font = `900 ${11 * dpr}px Courier New, monospace`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('YOU: ' + pc.name, bx + badgeW / 2, by + badgeH / 2);
+  ctx.restore();
+}
+
+function drawActionButton() {
+  if (!_fromPlay) return;
+  const l = layout();
+  const dpr = l.dpr;
+  const c = activeChar(0);
+  const isDisabled = _pickerStep === 2 && c.id === _pickedPlayer;
+
+  const bx = W / 2 - l.actionBtnW / 2;
+  const by = l.actionBtnY;
+  const pulse = 0.88 + Math.sin(frame * 0.07) * 0.12;
+
+  ctx.save();
+  if (isDisabled) {
+    ctx.globalAlpha = 0.3;
+  } else {
+    ctx.globalAlpha = pulse;
+    ctx.shadowColor = c.hue;
+    ctx.shadowBlur = 18 * dpr;
+  }
+
+  roundedRect(bx, by, l.actionBtnW, l.actionBtnH, 12 * dpr);
+  ctx.fillStyle = isDisabled ? 'rgba(60,50,80,0.8)' : c.hue;
+  ctx.fill();
+
+  if (!isDisabled) {
+    ctx.shadowBlur = 0;
+    const label = _pickerStep === 1
+      ? 'PLAY AS  ' + c.name
+      : 'TEAM UP WITH  ' + c.name;
+    ctx.fillStyle = '#111';
+    ctx.font = `900 ${17 * dpr}px Courier New, monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, W / 2, by + l.actionBtnH / 2, l.actionBtnW - 20 * dpr);
+  }
+  ctx.restore();
 }
 
 function drawArrows() {
@@ -378,23 +515,30 @@ function drawFrame() {
   ctx.clearRect(0, 0, W, H);
   const l = layout();
   const c = activeChar(0);
+  const isGrayedOut = _fromPlay && _pickerStep === 2 && c.id === _pickedPlayer;
 
   const grd = ctx.createRadialGradient(W / 2, H * 0.54, 0, W / 2, H * 0.54, H * 0.72);
-  grd.addColorStop(0, c.hue + '22');
+  grd.addColorStop(0, (isGrayedOut ? '#888888' : c.hue) + '22');
   grd.addColorStop(0.5, '#1b0630');
   grd.addColorStop(1, '#080014');
   ctx.fillStyle = grd;
   ctx.fillRect(0, 0, W, H);
 
-  drawSprite(activeChar(-1), l.leftX, l.sideY, l.sideH, 0.28, false);
-  drawSprite(activeChar(1), l.rightX, l.sideY, l.sideH, 0.28, false);
+  // Side sprites (dim picked player in step 2)
+  const prevC = activeChar(-1);
+  const nextC = activeChar(1);
+  const prevAlpha = (_fromPlay && _pickerStep === 2 && prevC.id === _pickedPlayer) ? 0.1 : 0.28;
+  const nextAlpha = (_fromPlay && _pickerStep === 2 && nextC.id === _pickedPlayer) ? 0.1 : 0.28;
+  drawSprite(prevC, l.leftX, l.sideY, l.sideH, prevAlpha, false);
+  drawSprite(nextC, l.rightX, l.sideY, l.sideH, nextAlpha, false);
 
-  if (zoomed) {
+  if (zoomed && !_fromPlay) {
     drawFace(c);
     drawName(c, l.labelY, true);
     drawSummary(c, l.summaryY);
   } else {
     ctx.save();
+    if (isGrayedOut) ctx.globalAlpha = 0.35;
     ctx.translate(l.cx, l.floor + 10 * l.dpr);
     ctx.scale(0.82, 0.18);
     ctx.beginPath();
@@ -402,13 +546,18 @@ function drawFrame() {
     ctx.fillStyle = 'rgba(0,0,0,0.28)';
     ctx.fill();
     ctx.restore();
-    drawSprite(c, l.cx, l.floor, l.bodyH, 1, true);
-    drawName(c, l.labelY, true);
+    drawSprite(c, l.cx, l.floor, l.bodyH, isGrayedOut ? 0.35 : 1, !isGrayedOut);
+    drawName(c, l.labelY, !isGrayedOut);
     drawSummary(c, l.summaryY);
   }
 
   drawArrows();
-  drawDots();
+  if (_fromPlay) {
+    drawActionButton();
+    drawPickerBadge();
+  } else {
+    drawDots();
+  }
 }
 
 function tick() {

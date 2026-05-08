@@ -297,11 +297,17 @@ function fitCanvas() {
     _rotated = false;
     _scale = Math.min(lw / GW, lh / GH);
     const cw = GW * _scale, ch = GH * _scale;
+    const cx = (lw - cw) / 2;
     canvas.style.width  = cw + 'px';
     canvas.style.height = ch + 'px';
-    canvas.style.left   = ((lw - cw) / 2) + 'px';
+    canvas.style.left   = cx + 'px';
     canvas.style.top    = ((lh - ch) / 2) + 'px';
     canvas.style.transform = '';
+    // Anchor overlay buttons to canvas edges
+    const sideBtns = document.getElementById('side-btns');
+    const volCtrl  = document.getElementById('vol-controls');
+    if (sideBtns) sideBtns.style.right = (cx + 12) + 'px';
+    if (volCtrl)  volCtrl.style.left   = (cx + 12) + 'px';
   }
 }
 window.addEventListener('resize', fitCanvas);
@@ -2236,30 +2242,12 @@ canvas.addEventListener('touchstart', e => {
         if (x >= 156 && x < 244) { S._difficulty = 'normal'; continue; }
         if (x >= 244 && x < 330) { S._difficulty = 'hard';   continue; }
       }
-      S._charSelectStep = 1; S.screen = 'charselect'; return;
-    }
-    if (S.screen === 'charselect') {
-      const _all = ['nara','ethan','brendan','will'];
-      const _CX  = [50, 148, 246, 344];
-      // PLAY button (visible once both chosen)
-      if (S._selectedPlayer && S._selectedTeammate && y >= GH - 46 && y <= GH - 6 && Math.abs(x - GW/2) <= 76) {
-        startGameWithSelection(); return;
-      }
-      for (let _i = 0; _i < 4; _i++) {
-        if (Math.abs(x - _CX[_i]) <= 48 && y >= 150 && y <= GH - 60) {
-          const _id = _all[_i];
-          if ((S._charSelectStep || 1) === 1) {
-            S._selectedPlayer = _id; S._selectedTeammate = null; S._charSelectStep = 2;
-          } else if (_id !== S._selectedPlayer) {
-            S._selectedTeammate = _id; startGameWithSelection();
-          }
-          return;
-        }
-      }
+      window.location.href = '/characters/?from=play&difficulty=' + (S._difficulty || 'normal');
       return;
     }
     if (S.screen === 'gameover') {
-      initState(); S._charSelectStep = 1; S.screen = 'charselect'; return;
+      window.location.href = '/characters/?from=play';
+      return;
     }
     if (S.screen !== 'playing') return;
 
@@ -2342,14 +2330,7 @@ window.addEventListener('keydown', e => {
   KEYS[e.code] = true;
   if (S.screen === 'title' || S.screen === 'gameover') {
     if (e.code === 'Space' || e.code === 'Enter') {
-      if (S.screen === 'gameover') initState();
-      S._charSelectStep = 1; S.screen = 'charselect';
-    }
-    return;
-  }
-  if (S.screen === 'charselect') {
-    if (e.code === 'Space' || e.code === 'Enter') {
-      if (S._selectedPlayer && S._selectedTeammate) startGameWithSelection();
+      window.location.href = '/characters/?from=play&difficulty=' + (S._difficulty || 'normal');
     }
     return;
   }
@@ -2427,29 +2408,11 @@ canvas.addEventListener('mousedown', e => {
       if (x >= 156 && x < 244) { S._difficulty = 'normal'; return; }
       if (x >= 244 && x < 330) { S._difficulty = 'hard';   return; }
     }
-    S._charSelectStep = 1; S.screen = 'charselect'; return;
+    window.location.href = '/characters/?from=play&difficulty=' + (S._difficulty || 'normal');
+    return;
   }
   if (S.screen === 'gameover') {
-    initState();
-    S._charSelectStep = 1; S.screen = 'charselect'; return;
-  }
-  if (S.screen === 'charselect') {
-    const _all = ['nara','ethan','brendan','will'];
-    const _CX  = [50, 148, 246, 344];
-    if (S._selectedPlayer && S._selectedTeammate && y >= GH - 39 && y <= GH - 11 && Math.abs(x - GW/2) <= 55) {
-      startGameWithSelection(); return;
-    }
-    for (let _i = 0; _i < 4; _i++) {
-      if (Math.abs(x - _CX[_i]) <= 48 && y >= 150 && y <= GH - 60) {
-        const _id = _all[_i];
-        if ((S._charSelectStep || 1) === 1) {
-          S._selectedPlayer = _id; S._selectedTeammate = null; S._charSelectStep = 2;
-        } else if (_id !== S._selectedPlayer) {
-          S._selectedTeammate = _id; startGameWithSelection();
-        }
-        return;
-      }
-    }
+    window.location.href = '/characters/?from=play';
     return;
   }
   if (S.screen !== 'playing') return;
@@ -4152,8 +4115,12 @@ function updateScoreFlash() {
 }
 
 // ── Main Game Loop ────────────────────────────────────────────────
-function loop() {
+let _lastTime = 0;
+function loop(now) {
   requestAnimationFrame(loop);
+  const elapsed = now - _lastTime;
+  if (elapsed < 15.5) return;          // cap to ~60fps on 120Hz displays
+  _lastTime = now - (elapsed % 16.667); // drift correction
   S.frame++;
 
   ctx.clearRect(0, 0, GW, GH);
@@ -4606,6 +4573,15 @@ function loop() {
 
 // ── Boot ─────────────────────────────────────────────────────────
 initState();
+(function() {
+  const _p = new URLSearchParams(window.location.search);
+  if (_p.get('player') && _p.get('teammate')) {
+    S._selectedPlayer   = _p.get('player');
+    S._selectedTeammate = _p.get('teammate');
+    if (_p.get('difficulty')) S._difficulty = _p.get('difficulty');
+    startGameWithSelection();
+  }
+})();
 loop();
 
 function skipSpotify() {
@@ -4617,9 +4593,11 @@ function skipSpotify() {
 <script src="https://sdk.scdn.co/spotify-player.js"></script>
 <script src="config.js"></script>
 <script src="js/spotify.js"></script>
-<a href="/" style="position:fixed;top:84px;right:12px;z-index:9999;padding:7px 13px;background:linear-gradient(135deg,#a855f7,#ec4899);color:#fff;border-radius:18px;font-size:10px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-weight:800;letter-spacing:0.1em;text-decoration:none;box-shadow:0 4px 12px rgba(168,85,247,0.35);">← LOBBY</a>
-<button onclick="document.getElementById('feedback-overlay').classList.add('open')" style="position:fixed;top:120px;right:12px;z-index:9999;padding:7px 13px;background:rgba(255,107,53,0.15);color:#FF6B35;border:1px solid rgba(255,107,53,0.35);border-radius:18px;font-size:10px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-weight:800;letter-spacing:0.1em;cursor:pointer;">FEEDBACK</button>
-<a href="./characters/" style="position:fixed;top:156px;right:12px;z-index:9999;padding:7px 13px;background:rgba(168,85,247,0.12);color:#a855f7;border:1px solid rgba(168,85,247,0.3);border-radius:18px;font-size:10px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-weight:800;letter-spacing:0.1em;text-decoration:none;">THE BAND</a>
+<div id="side-btns" style="position:fixed;top:84px;right:12px;z-index:9999;display:flex;flex-direction:column;gap:12px;align-items:flex-end;">
+  <a href="/" style="padding:7px 13px;background:linear-gradient(135deg,#a855f7,#ec4899);color:#fff;border-radius:18px;font-size:10px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-weight:800;letter-spacing:0.1em;text-decoration:none;box-shadow:0 4px 12px rgba(168,85,247,0.35);">← LOBBY</a>
+  <button onclick="document.getElementById('feedback-overlay').classList.add('open')" style="padding:7px 13px;background:rgba(255,107,53,0.15);color:#FF6B35;border:1px solid rgba(255,107,53,0.35);border-radius:18px;font-size:10px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-weight:800;letter-spacing:0.1em;cursor:pointer;">FEEDBACK</button>
+  <a href="./characters/" style="padding:7px 13px;background:rgba(168,85,247,0.12);color:#a855f7;border:1px solid rgba(168,85,247,0.3);border-radius:18px;font-size:10px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-weight:800;letter-spacing:0.1em;text-decoration:none;">THE BAND</a>
+</div>
 <div id="vol-controls" style="display:none;position:fixed;top:84px;left:12px;z-index:9999;flex-direction:row;align-items:center;gap:8px;background:rgba(13,5,32,0.75);border:1px solid rgba(255,255,255,0.1);border-radius:20px;padding:6px 14px;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);">
   <button id="vol-down" style="background:none;border:none;color:rgba(255,255,255,0.55);font-size:16px;cursor:pointer;padding:2px 4px;line-height:1;">−</button>
   <button id="mute-btn" style="background:none;border:none;color:#fff;font-size:16px;cursor:pointer;padding:2px 4px;line-height:1;">🔊</button>
