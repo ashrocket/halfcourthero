@@ -3,8 +3,8 @@
 // to Spotify itself.
 
 const SpotifyAuth = {
-  hasToken() { return !!_readToken('sp_token'); },
-  getToken()  { return _readToken('sp_token'); },
+  hasToken() { return !!_readToken('sp_token_v2'); },
+  getToken()  { return _readToken('sp_token_v2'); },
 
   async refresh() {
     const rt = _readToken('sp_refresh');
@@ -20,7 +20,7 @@ const SpotifyAuth = {
     });
     if (!res.ok) return null;
     const d = await res.json();
-    _writeToken('sp_token', d.access_token, d.expires_in);
+    _writeToken('sp_token_v2', d.access_token, d.expires_in);
     if (d.refresh_token) _writeToken('sp_refresh', d.refresh_token, 60 * 60 * 24 * 30);
     return d.access_token;
   },
