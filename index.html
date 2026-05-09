@@ -4292,8 +4292,10 @@ function updateCPUDefense() {
   const jDx = targetJX - will.x;
   const jDy = targetJY - will.y;
   const prevJX = will.x, prevJY = will.y;
+  // Close gap faster when carrier is actively driving into the paint
+  const willGapSpd = driveDepth && carrier.vx > 1.5 ? 2.5 : 1.8;
   if (Math.abs(jDx) > 8) {
-    will.x += Math.sign(jDx) * Math.min(1.8, Math.abs(jDx));
+    will.x += Math.sign(jDx) * Math.min(willGapSpd, Math.abs(jDx));
     will.facing = jDx < 0 ? 1 : -1;
   } else {
     will.facing = -1;
@@ -4367,6 +4369,10 @@ function updateCPUBehavior() {
     if (!brendan._willShoot && Math.random() < threeProb && brendan.cpuTimer > 20) {
       brendan._willShoot = true; brendan._willThree = true;
     }
+    // If closely guarded at mid-range, drive to the basket (don't plant for a contested shot)
+    const closestDefB = Math.min(...TEAM_A_IDS.map(id => Math.hypot(S.players[id].x - brendan.x, S.players[id].y - brendan.y)));
+    const contestedAtMid = closestDefB < 35 && Math.abs(brendan.x - HOOP_X) > SHOT_RANGE_LAY && !brendan._willShoot;
+    if (contestedAtMid) { brendan._willShoot = true; brendan._willThree = false; }
     const targetX = brendan._willThree ? HOOP_X - 215 : brendan._willShoot ? HOOP_X - 30 : HOOP_X - 80;
     const brendanSpeed = diff === 'hard' ? 2.8 : diff === 'easy' ? 1.6 : 2.2;
     const dx = targetX - brendan.x;
@@ -4429,6 +4435,9 @@ function updateCPUBehavior() {
       else if (Math.random() < 0.004) will._driving = true;
       else if (diff !== 'easy' && Math.random() < 0.003) { will._postUp = true; spawnThought(TEAM_B_IDS[1], '💪 POST!'); }
     }
+    // If closely guarded at mid-range, attack the basket instead of settling
+    const closestDefW = Math.min(...TEAM_A_IDS.map(id => Math.hypot(S.players[id].x - will.x, S.players[id].y - will.y)));
+    if (closestDefW < 35 && Math.abs(will.x - HOOP_X) > SHOT_RANGE_LAY && !will._driving && !will._goingThree) will._driving = true;
     const targetX = will._goingThree ? HOOP_X - 215 : will._driving ? HOOP_X - 25 : will._postUp ? HOOP_X - 40 : HOOP_X - 55;
     const ddx = targetX - will.x;
     const prevWXcpu = will.x;
@@ -4507,8 +4516,12 @@ function cpuShoot(p) {
   const deficit = S.score[0] - S.score[1];
   const rubberMult = deficit >= 4 ? (1 + deficit * 0.04) : 1.0;
   const charBonus3 = (dist > SHOT_RANGE_2 && CHARS[p.id]._3ptBonus) ? CHARS[p.id]._3ptBonus : 0;
-  const acc  = (dist < SHOT_RANGE_LAY ? 0.75 : dist < SHOT_RANGE_2 ? 0.55 : 0.35 + charBonus3) * diffMult * mercyMult * rubberMult;
-  const made = Math.random() < Math.min(0.96, acc);
+  const baseAcc = (dist < SHOT_RANGE_LAY ? 0.75 : dist < SHOT_RANGE_2 ? 0.58 : 0.36 + charBonus3) * diffMult * mercyMult * rubberMult;
+  // Wide-open or contested modifier (learned from AI battle: defender proximity matters)
+  const closestHuman = Math.min(...TEAM_A_IDS.map(id => Math.hypot(S.players[id].x - p.x, S.players[id].y - p.y)));
+  const contestAdj = closestHuman > 85 ? 0.12 : closestHuman < 38 ? -0.15 : 0;
+  const acc = Math.min(0.96, Math.max(0.04, baseAcc + contestAdj));
+  const made = Math.random() < acc;
 
   p.anim = 'shoot';
   p.hasBall = false;
