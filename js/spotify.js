@@ -141,7 +141,8 @@ window.onSpotifyWebPlaybackSDKReady = function () {
   }
 
   // No token — send to lobby (unless local dev)
-  if (location.hostname !== 'localhost') {
+  const isLocalDev = location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.hostname === '::1';
+  if (!isLocalDev) {
     window.location.href = 'https://bandmusicgames.party';
   }
   // On localhost the overlay stays visible; skip button still works

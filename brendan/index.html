@@ -26,7 +26,7 @@ const HUE    = '#FF6B35';
 const NAME   = 'BRENDAN';
 const ROLE   = 'DRUMS';
 const ABIL   = '💪  PAINT BEAST  ·  IN THE PAINT';
-const SPRITE = '../assets/brendan_sprite.png';
+const SPRITE = '../assets/brendan_sprite.png?v=art-v4';
 
 const canvas = document.getElementById('cv');
 const ctx    = canvas.getContext('2d');
@@ -48,26 +48,7 @@ function resize(){
 }
 window.addEventListener('resize',resize);resize();
 
-function drawOverlay(){
-  ctx.fillStyle='#C03A15';ctx.beginPath();ctx.ellipse(0,-131,14,12,0,0,Math.PI*2);ctx.fill();
-  ctx.beginPath();ctx.ellipse(0,-141,11,5,0,0,Math.PI*2);ctx.fill();
-  ctx.fillStyle='#E04A20';ctx.beginPath();ctx.ellipse(0,-132,9,7,0,0,Math.PI*2);ctx.fill();
-  ctx.fillStyle='#8A2510';ctx.beginPath();ctx.ellipse(0,-122,10,5,0,0,Math.PI*2);ctx.fill();
-  ctx.fillStyle='#0C0806';
-  for(const[hx,hy,hr]of[[-15,-148,7],[-22,-144,6],[-17,-137,7],[-22,-131,6.5],[-16,-125,6.5],[-21,-119,6],[15,-148,7],[22,-144,6],[17,-137,7],[22,-131,6.5],[16,-125,6.5],[21,-119,6]])
-  {ctx.beginPath();ctx.arc(hx+1,hy+1,hr,0,Math.PI*2);ctx.fill();}
-  ctx.fillStyle='#1C0E09';
-  for(const[hx,hy,hr]of[[-15,-148,7],[-22,-144,6],[-17,-137,7],[-22,-131,6.5],[-16,-125,6.5],[-21,-119,6],[15,-148,7],[22,-144,6],[17,-137,7],[22,-131,6.5],[16,-125,6.5],[21,-119,6]])
-  {ctx.beginPath();ctx.arc(hx,hy,hr,0,Math.PI*2);ctx.fill();}
-  ctx.fillStyle='#3A1A0A';
-  for(const[hx,hy,hr]of[[-15,-148,7],[-22,-144,6],[-17,-137,7],[-22,-131,6.5],[-16,-125,6.5],[-21,-119,6],[15,-148,7],[22,-144,6],[17,-137,7],[22,-131,6.5],[16,-125,6.5],[21,-119,6]])
-  {ctx.beginPath();ctx.arc(hx-hr*0.3,hy-hr*0.35,hr*0.45,0,Math.PI*2);ctx.fill();}
-  ctx.fillStyle='#0F0F0F';ctx.beginPath();ctx.ellipse(0,-163,16,13,0,Math.PI,0);ctx.fill();
-  ctx.fillRect(-16,-165,32,13);
-  ctx.fillStyle='#0A0A0A';ctx.fillRect(-16,-154,32,5);
-  ctx.strokeStyle='#2A2A2A';ctx.lineWidth=0.8;
-  for(let i=-14;i<=14;i+=3){ctx.beginPath();ctx.moveTo(i,-155);ctx.lineTo(i,-150);ctx.stroke();}
-}
+function drawOverlay(){ /* features baked into sprite */ }
 
 function drawFrame(){
   ctx.clearRect(0,0,W,H);

@@ -1,0 +1,9 @@
+{
+  "name": "half-court-hero",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "npx --yes vite@4 --host 127.0.0.1 --port 8082",
+    "deploy": "npx wrangler pages deploy . --project-name halfcourthero-narasroom --branch main"
+  }
+}
