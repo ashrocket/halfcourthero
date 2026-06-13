@@ -511,7 +511,6 @@ function initState() {
 
     // Onboarding
     onboardingTimer: 180, // ~3 seconds at 60fps
-    easyMode: true,       // Defaulting to true for easier initial testing
   };
 
   S.players[TEAM_A_IDS[0]].hasBall = true;
@@ -1448,12 +1447,15 @@ function drawSwitchFlash() {
 }
 
 function drawEasyModeOverlay() {
-  if (!S.easyMode || !S.shootHeld || S.possession !== 'a') return;
-  
+  // Shot-charge assist: easy difficulty only
+  if (S._difficulty !== 'easy' || !S.shootHeld || S.possession !== 'a') return;
+
   const power = S.shootPower;
-  const inGreen = power >= POWER_GREEN_LO && power <= POWER_GREEN_HI;
+  // same widened green window the easy-mode shot logic uses
+  const lo = POWER_GREEN_LO - 14, hi = POWER_GREEN_HI + 14;
+  const inGreen = power >= lo && power <= hi;
   const isPerfect = power >= 60 && power <= 68;
-  const isRed = power > POWER_GREEN_HI;
+  const isRed = power > hi;
   
   let color = 'rgba(255, 200, 0, 0.4)'; // Yellow
   if (isPerfect) color = 'rgba(255, 255, 255, 0.5)';
@@ -2504,6 +2506,18 @@ function toGameCoords(clientX, clientY) {
   };
 }
 
+// Title-screen hit zones — must match drawTitle geometry
+// (difficulty buttons drawn at y 499-531, INVITE FRIEND at y 570-600)
+function titleHit(x, y) {
+  if (y >= 495 && y <= 535) {
+    if (x >= 70  && x < 156) return 'easy';
+    if (x >= 156 && x < 244) return 'normal';
+    if (x >= 244 && x < 330) return 'hard';
+  }
+  if (y >= 566 && y <= 604 && Math.abs(x - GW / 2) <= 80) return 'vs';
+  return null;
+}
+
 canvas.addEventListener('touchstart', e => {
   e.preventDefault();
   for (const t of e.changedTouches) {
@@ -2537,14 +2551,9 @@ canvas.addEventListener('touchstart', e => {
     if (S.showInfo) { S.showInfo = false; continue; }
 
     if (S.screen === 'title') {
-      // Difficulty buttons
-      if (y >= 495 && y <= 535) {
-        if (x >= 70  && x < 156) { S._difficulty = 'easy';   continue; }
-        if (x >= 156 && x < 244) { S._difficulty = 'normal'; continue; }
-        if (x >= 244 && x < 330) { S._difficulty = 'hard';   continue; }
-      }
-      // VS FRIEND button
-      if (y >= 566 && y <= 604 && Math.abs(x - GW / 2) <= 80) {
+      const hit = titleHit(x, y);
+      if (hit === 'easy' || hit === 'normal' || hit === 'hard') { S._difficulty = hit; continue; }
+      if (hit === 'vs') {
         window.location.href = '/characters/?from=pvp';
         return;
       }
@@ -2745,12 +2754,9 @@ canvas.addEventListener('mousedown', e => {
   if (Math.hypot(x - 374, y - 14) < 18) { S.showInfo = !S.showInfo; return; }
   if (S.showInfo) { S.showInfo = false; return; }
   if (S.screen === 'title') {
-    if (y >= 527 && y <= 567) {
-      if (x >= 70  && x < 156) { S._difficulty = 'easy';   return; }
-      if (x >= 156 && x < 244) { S._difficulty = 'normal'; return; }
-      if (x >= 244 && x < 330) { S._difficulty = 'hard';   return; }
-    }
-    if (y >= 596 && y <= 634 && Math.abs(x - GW / 2) <= 80) {
+    const hit = titleHit(x, y);
+    if (hit === 'easy' || hit === 'normal' || hit === 'hard') { S._difficulty = hit; return; }
+    if (hit === 'vs') {
       window.location.href = '/characters/?from=pvp';
       return;
     }
